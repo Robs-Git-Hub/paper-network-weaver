@@ -1,10 +1,10 @@
-
 import React, { useState, useEffect } from 'react';
 import { SearchBar } from '@/components/SearchBar';
 import { PaperSelector } from '@/components/PaperSelector';
 import { MainAnalysisView } from '@/components/MainAnalysisView';
 import { useKnowledgeGraphStore } from '@/store/knowledge-graph-store';
 import { workerManager } from '@/services/workerManager';
+import { openAlexService } from '@/services/openAlex';
 import { Loader2 } from 'lucide-react';
 
 interface PaperResult {
@@ -47,14 +47,7 @@ const Index = () => {
     setTotalCount(undefined);
 
     try {
-      const url = `https://api.openalex.org/works?search=${encodeURIComponent(query)}&per-page=25&select=id,title,display_name,authorships,publication_year,primary_location,cited_by_count,doi`;
-      
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`Search failed: ${response.status}`);
-      }
-
-      const data = await response.json();
+      const data = await openAlexService.searchPapers(query);
       setSearchResults(data.results || []);
       setTotalCount(data.meta?.count);
     } catch (error) {
