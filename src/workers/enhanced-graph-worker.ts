@@ -211,6 +211,7 @@ async function processOpenAlexInstitution(instData: any): Promise<string> {
 }
 
 async function fetchFirstDegreeCitations(masterPaperOpenAlexId: string) {
+  console.log('[Worker] Phase A, Step 2: Fetching 1st degree citations from OpenAlex.');
   postMessage('progress/update', { message: 'Fetching 1st degree citations...' });
 
   const normalizeOpenAlexId = (id: string): string => {
@@ -280,7 +281,7 @@ async function fetchFirstDegreeCitations(masterPaperOpenAlexId: string) {
     await createStubsFromOpenAlexIds(frequentRelated, 'similar');
   }
   
-  console.log(`[Worker] Phase A: Processed ${data.results.length} citations, ${frequentRefs.length} reference stubs, ${frequentRelated.length} similar stubs`);
+  console.log(`[Worker] Phase A, Step 2: Processed ${data.results.length} citations, found ${frequentRefs.length} frequent reference stubs and ${frequentRelated.length} frequent similar stubs.`);
 }
 
 async function createStubsFromOpenAlexIds(openAlexIds: string[], relationshipType: 'cites' | 'similar') {
@@ -325,8 +326,12 @@ async function enrichMasterPaperWithSemanticScholar() {
     key.startsWith('doi:') && externalIdIndex[key] === masterPaperUid
   );
   
-  if (!doiKey) return;
+  if (!doiKey) {
+    console.warn('[Worker] Phase A, Step 3: Skipped Semantic Scholar enrichment, no DOI found for Master Paper.');
+    return;
+  }
   
+  console.log('[Worker] Phase A, Step 3: Enriching with Semantic Scholar data.');
   const doi = doiKey.split('doi:')[1];
   try {
     const ssData = await semanticScholarService.fetchPaperDetails(doi);
@@ -487,6 +492,7 @@ async function hydrateMasterPaper() {
   const openAlexId = openAlexKey.split('openalex:')[1];
   
   try {
+    console.log('[Worker] Phase B, Step 4: Hydrating Master Paper from OpenAlex.');
     postMessage('progress/update', { message: 'Enriching master paper...' });
     
     const url = `https://api.openalex.org/works/${openAlexId}?select=id,title,display_name,publication_year,publication_date,primary_location,abstract_inverted_index,fwci,cited_by_count,type,language,keywords,open_access,authorships`;
@@ -520,18 +526,22 @@ async function hydrateMasterPaper() {
       changes: updatedPaper
     });
     
+    console.log('[Worker] Phase B, Step 4: Master Paper hydration complete.');
+    
   } catch (error) {
     console.warn('[Worker] Master paper hydration failed:', error);
   }
 }
 
 async function performAuthorReconciliation() {
+  console.log('[Worker] Phase B, Steps 5 & 6: Starting Author Reconciliation.');
   postMessage('progress/update', { message: 'Reconciling authors...' });
   
   const stubAuthors = Object.values(authors).filter(author => author.is_stub);
   
   if (stubAuthors.length === 0) {
-    postMessage('app_status/update', { state: 'active', message: null });
+    console.log('[Worker] Phase B, Steps 5 & 6: No stub authors to reconcile. Finishing enrichment.');
+    postMessage('app_status/update', { state: 'idle', message: null });
     return;
   }
   
@@ -565,7 +575,8 @@ async function performAuthorReconciliation() {
   }
   
   if (reconciliationMap.size === 0) {
-    postMessage('app_status/update', { state: 'active', message: null });
+    console.log('[Worker] Phase B, Steps 5 & 6: No DOIs found for stub authors. Finishing enrichment.');
+    postMessage('app_status/update', { state: 'idle', message: null });
     return;
   }
   
@@ -679,10 +690,12 @@ async function performAuthorReconciliation() {
       }
     });
     
-    console.log(`[Worker] Author reconciliation: ${successfulMatches.length} matches, ${authorDeletions.length} merged`);
+    console.log(`[Worker] Phase B, Steps 5 & 6: Author reconciliation complete. Merged ${authorDeletions.length} stub authors into ${mergePlan.size} canonical authors.`);
+  } else {
+    console.log('[Worker] Phase B, Steps 5 & 6: No high-confidence author matches found.');
   }
   
-  postMessage('app_status/update', { state: 'active', message: null });
+  postMessage('app_status/update', { state: 'idle', message: null });
 }
 
 self.addEventListener('message', async (event: MessageEvent<WorkerMessage>) => {
@@ -691,6 +704,7 @@ self.addEventListener('message', async (event: MessageEvent<WorkerMessage>) => {
   try {
     switch (type) {
       case 'graph/processMasterPaper':
+        console.log("--- [Worker] Received 'graph/processMasterPaper'. Starting Phase A. ---");
         papers = {};
         authors = {};
         institutions = {};
@@ -701,13 +715,17 @@ self.addEventListener('message', async (event: MessageEvent<WorkerMessage>) => {
         stubCreationThreshold = payload.stub_creation_threshold || 3;
         
         postMessage('app_status/update', { state: 'loading', message: 'Processing master paper...' });
+        
+        console.log('[Worker] Phase A, Step 1: Processing Master Paper.');
         masterPaperUid = await processOpenAlexPaper(payload.paper, false);
+        console.log('[Worker] Phase A, Step 1: Master Paper processed.');
         
         if (payload.paper.id) {
           await fetchFirstDegreeCitations(payload.paper.id);
           await enrichMasterPaperWithSemanticScholar();
         }
         
+        console.log('--- [Worker] Phase A Complete. Posting initial graph to main thread. ---');
         postMessage('graph/setState', {
           data: {
             papers,
@@ -719,10 +737,13 @@ self.addEventListener('message', async (event: MessageEvent<WorkerMessage>) => {
           }
         });
         
+        console.log('--- [Worker] Starting Phase B: Background Enrichment. ---');
         postMessage('app_status/update', { state: 'enriching', message: null });
         
         await hydrateMasterPaper();
         await performAuthorReconciliation();
+        
+        console.log('--- [Worker] Phase B Complete. All enrichment finished. ---');
         
         break;
         
@@ -730,7 +751,7 @@ self.addEventListener('message', async (event: MessageEvent<WorkerMessage>) => {
         console.warn('[Worker] Unknown message type:', type);
     }
   } catch (error) {
-    console.error('[Worker] Error processing message:', error);
+    console.error('[Worker] A fatal error occurred during graph build:', error);
     postMessage('error/fatal', { 
       message: `Worker error: ${error instanceof Error ? error.message : 'Unknown error'}` 
     });
