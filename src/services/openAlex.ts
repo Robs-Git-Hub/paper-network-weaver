@@ -79,7 +79,7 @@ export class OpenAlexService {
   async fetchCitations(openAlexId: string): Promise<OpenAlexSearchResponse> {
     // Extract just the ID part from the full OpenAlex URL
     const workId = openAlexId.replace('https://openalex.org/', '');
-    const url = `${this.baseUrl}/works?filter=cites:${workId}&per_page=200&select=id,ids,doi,title,publication_year,publication_date,type,authorships,fwci,cited_by_count,abstract_inverted_index,primary_location`;
+    const url = `${this.baseUrl}/works?filter=cites:${workId}&per_page=200&select=id,ids,doi,title,publication_year,publication_date,type,authorships,fwci,cited_by_count,abstract_inverted_index,primary_location,best_oa_location,open_access,keywords,referenced_works,related_works`;
     
     console.log('OpenAlex citations URL:', url);
     
