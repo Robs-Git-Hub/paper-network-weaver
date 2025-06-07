@@ -1,3 +1,4 @@
+
 import { create } from 'zustand';
 
 // Define the interfaces for the knowledge graph data
@@ -84,6 +85,20 @@ interface KnowledgeGraphStore {
     paper_relationships: PaperRelationship[];
     external_id_index: Record<string, string>;
   }) => void;
+  updatePaper: (id: string, changes: Partial<Paper>) => void;
+  addNodes: (data: {
+    papers?: Record<string, Paper>;
+    authors?: Record<string, Author>;
+    institutions?: Record<string, Institution>;
+    authorships?: Record<string, Authorship>;
+    paper_relationships?: PaperRelationship[];
+  }) => void;
+  applyAuthorMerge: (updates: {
+    authors: Array<{ id: string; changes: Partial<Author> }>;
+    authorships: Array<{ id: string; changes: Partial<Authorship> }>;
+  }, deletions: {
+    authors: string[];
+  }) => void;
 }
 
 export const useKnowledgeGraphStore = create<KnowledgeGraphStore>((set, get) => ({
@@ -113,5 +128,49 @@ export const useKnowledgeGraphStore = create<KnowledgeGraphStore>((set, get) => 
       paper_relationships: data.paper_relationships,
       external_id_index: data.external_id_index
     });
-  }
+  },
+
+  updatePaper: (id, changes) => set((state) => ({
+    papers: {
+      ...state.papers,
+      [id]: { ...state.papers[id], ...changes }
+    }
+  })),
+
+  addNodes: (data) => set((state) => ({
+    papers: { ...state.papers, ...(data.papers || {}) },
+    authors: { ...state.authors, ...(data.authors || {}) },
+    institutions: { ...state.institutions, ...(data.institutions || {}) },
+    authorships: { ...state.authorships, ...(data.authorships || {}) },
+    paper_relationships: [...state.paper_relationships, ...(data.paper_relationships || [])]
+  })),
+
+  applyAuthorMerge: (updates, deletions) => set((state) => {
+    const newAuthors = { ...state.authors };
+    const newAuthorships = { ...state.authorships };
+
+    // Apply author updates
+    updates.authors.forEach(({ id, changes }) => {
+      if (newAuthors[id]) {
+        newAuthors[id] = { ...newAuthors[id], ...changes };
+      }
+    });
+
+    // Apply authorship updates
+    updates.authorships.forEach(({ id, changes }) => {
+      if (newAuthorships[id]) {
+        newAuthorships[id] = { ...newAuthorships[id], ...changes };
+      }
+    });
+
+    // Delete authors
+    deletions.authors.forEach(id => {
+      delete newAuthors[id];
+    });
+
+    return {
+      authors: newAuthors,
+      authorships: newAuthorships
+    };
+  })
 }));

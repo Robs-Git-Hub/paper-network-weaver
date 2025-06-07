@@ -1,15 +1,14 @@
+
 import React, { useState, useEffect } from 'react';
-import { useKnowledgeGraphStore } from '@/store/knowledge-graph-store';
 import { SearchBar } from '@/components/SearchBar';
 import { PaperSelector } from '@/components/PaperSelector';
-import { AppHeader } from '@/components/AppHeader';
 import { MainAnalysisView } from '@/components/MainAnalysisView';
-import { openAlexService } from '@/services/openAlex';
-import { useToast } from '@/hooks/use-toast';
+import { useKnowledgeGraphStore } from '@/store/knowledge-graph-store';
+import { workerManager } from '@/services/workerManager';
+import { Loader2 } from 'lucide-react';
 
 interface PaperResult {
   id: string;
-  doi?: string;
   title?: string;
   display_name?: string;
   authorships: Array<{
@@ -22,180 +21,148 @@ interface PaperResult {
     };
   };
   cited_by_count: number;
+  doi?: string;
 }
 
 const Index = () => {
   const [searchResults, setSearchResults] = useState<PaperResult[]>([]);
-  const [totalCount, setTotalCount] = useState<number>(0);
+  const [totalCount, setTotalCount] = useState<number | undefined>();
   const [isSearching, setIsSearching] = useState(false);
-  const [worker, setWorker] = useState<Worker | null>(null);
   
-  const { app_status, setAppStatus, setState, papers } = useKnowledgeGraphStore();
-  const { toast } = useToast();
+  const { app_status, setAppStatus } = useKnowledgeGraphStore();
 
-  // Initialize web worker
   useEffect(() => {
-    const newWorker = new Worker(new URL('../workers/graph-worker.ts', import.meta.url), {
-      type: 'module'
-    });
-
-    newWorker.onmessage = (e) => {
-      const { type, payload } = e.data;
-      console.log('[Main Thread] Received worker message:', type, payload);
-      
-      switch (type) {
-        case 'progress/update':
-          setAppStatus({ state: app_status.state, message: payload.message });
-          break;
-        case 'graph/setState':
-          console.log('[Main Thread] Setting graph state');
-          setState(payload.data);
-          setAppStatus({ state: 'active', message: null });
-          break;
-        case 'app/setStatus':
-          console.log('[Main Thread] Setting app status:', payload);
-          setAppStatus(payload);
-          break;
-        case 'error/fatal':
-          setAppStatus({ state: 'error', message: payload.message });
-          toast({
-            title: "Error",
-            description: payload.message,
-            variant: "destructive"
-          });
-          break;
-        default:
-          console.warn('Unknown worker message type:', type);
-      }
-    };
-
-    setWorker(newWorker);
-
+    // Initialize worker on component mount
+    workerManager.initialize();
+    
     return () => {
-      newWorker.terminate();
+      // Cleanup worker on unmount
+      workerManager.terminate();
     };
   }, []);
 
   const handleSearch = async (query: string) => {
     setIsSearching(true);
+    setSearchResults([]);
+    setTotalCount(undefined);
+
     try {
-      console.log('Searching for:', query);
-      const response = await openAlexService.searchPapers(query);
+      const url = `https://api.openalex.org/works?search=${encodeURIComponent(query)}&per-page=25&select=id,title,display_name,authorships,publication_year,primary_location,cited_by_count,doi`;
       
-      // Transform the results to match our expected interface
-      const transformedResults = response.results.map(paper => ({
-        id: paper.id,
-        doi: paper.doi, // Include the DOI
-        title: paper.title || paper.display_name || 'Untitled',
-        display_name: paper.display_name,
-        authorships: paper.authorships || [],
-        publication_year: paper.publication_year,
-        primary_location: paper.primary_location,
-        cited_by_count: paper.cited_by_count || 0
-      }));
-      
-      console.log('Transformed results:', transformedResults);
-      
-      setSearchResults(transformedResults);
-      setTotalCount(response.meta.count);
-      
-      toast({
-        title: "Search completed",
-        description: `Found ${response.meta.count} papers`
-      });
-      
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Search failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      setSearchResults(data.results || []);
+      setTotalCount(data.meta?.count);
     } catch (error) {
       console.error('Search error:', error);
-      toast({
-        title: "Search failed",
-        description: error instanceof Error ? error.message : "Unknown error occurred",
-        variant: "destructive"
+      setAppStatus({
+        state: 'error',
+        message: 'Search failed. Please try again.'
       });
     } finally {
       setIsSearching(false);
     }
   };
 
-  const handleSelectPaper = async (paper: PaperResult) => {
-    console.log('Selected paper:', paper);
-    setAppStatus({ state: 'loading', message: 'Building initial graph...' });
-    
-    // Clear search results to show the main analysis view
+  const handleSelectPaper = (paper: PaperResult) => {
     setSearchResults([]);
+    setTotalCount(undefined);
     
-    // Send selected paper to web worker for processing
-    if (worker) {
-      worker.postMessage({
-        type: 'graph/processMasterPaper',
-        payload: { paper }
-      });
-    }
+    // Reset any previous error state
+    setAppStatus({ state: 'idle', message: null });
     
-    toast({
-      title: "Paper selected",
-      description: `Processing "${paper.title || paper.display_name}"...`
-    });
+    // Start processing with the worker
+    workerManager.processMasterPaper(paper);
   };
 
-  const showSearchInterface = app_status.state === 'idle' && searchResults.length === 0;
-  const showSearchResults = searchResults.length > 0;
-  const showMainAnalysis = (app_status.state === 'loading' || app_status.state === 'enriching' || app_status.state === 'active') && !showSearchResults;
-
-  console.log('[Main Thread] Current app status:', app_status);
-  console.log('[Main Thread] Show states:', { showSearchInterface, showSearchResults, showMainAnalysis });
-
-  return (
-    <div className="min-h-screen bg-background">
-      <AppHeader isEnriching={app_status.state === 'enriching'} />
-      
-      <main className="container mx-auto px-4 py-8">
-        {showSearchInterface && (
-          <div className="min-h-[60vh] flex flex-col items-center justify-center text-center space-y-8">
-            <div className="space-y-4">
-              <h1 className="text-4xl font-bold text-foreground">
-                Academic Citation Explorer
-              </h1>
-              <p className="text-xl text-muted-foreground max-w-2xl">
-                Explore citation networks between research papers
-              </p>
-            </div>
-            
-            <SearchBar onSearch={handleSearch} isLoading={isSearching} />
+  // Loading state during Phase A
+  if (app_status.state === 'loading') {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto text-[#437e84]" />
+          <div>
+            <h2 className="text-lg font-semibold">Building Knowledge Graph</h2>
+            <p className="text-muted-foreground">
+              {app_status.message || 'Processing your selected paper...'}
+            </p>
           </div>
-        )}
+        </div>
+      </div>
+    );
+  }
 
-        {showSearchResults && (
-          <div className="space-y-6">
-            <div className="text-center space-y-4">
-              <h2 className="text-2xl font-semibold">Search Results</h2>
-              <SearchBar onSearch={handleSearch} isLoading={isSearching} />
-            </div>
-            
-            <PaperSelector
-              papers={searchResults}
-              onSelectPaper={handleSelectPaper}
-              totalCount={totalCount}
-            />
+  // Error state
+  if (app_status.state === 'error') {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center space-y-4 max-w-md">
+          <div className="text-red-500">
+            <h2 className="text-lg font-semibold">Error</h2>
+            <p className="text-sm">{app_status.message}</p>
           </div>
-        )}
+          <button
+            onClick={() => {
+              setAppStatus({ state: 'idle', message: null });
+              workerManager.initialize();
+            }}
+            className="px-4 py-2 bg-[#437e84] text-white rounded hover:bg-[#437e84]/90"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
-        {showMainAnalysis && (
-          <>
-            {app_status.state === 'loading' && (
-              <div className="text-center py-20">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#437e84] mx-auto mb-4"></div>
-                <p className="text-muted-foreground">
-                  {app_status.message || 'Processing...'}
-                </p>
+  // Main analysis view (active or enriching states)
+  if (app_status.state === 'active' || app_status.state === 'enriching') {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="container mx-auto px-4 py-8">
+          {/* Global status indicator for enriching state */}
+          {app_status.state === 'enriching' && (
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md text-blue-800 text-sm">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                Enriching data in the background. Some details may update automatically.
               </div>
-            )}
-            
-            {(app_status.state === 'enriching' || app_status.state === 'active') && (
-              <MainAnalysisView />
-            )}
-          </>
+            </div>
+          )}
+          
+          <MainAnalysisView />
+        </div>
+      </div>
+    );
+  }
+
+  // Initial search interface
+  return (
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4">
+      <div className="w-full max-w-4xl space-y-8">
+        <div className="text-center space-y-4">
+          <h1 className="text-4xl font-bold tracking-tight">
+            Academic Knowledge Graph Explorer
+          </h1>
+          <p className="text-xl text-muted-foreground">
+            Search for a research paper to build and analyze its citation network
+          </p>
+        </div>
+
+        <SearchBar onSearch={handleSearch} isLoading={isSearching} />
+
+        {searchResults.length > 0 && (
+          <PaperSelector
+            papers={searchResults}
+            onSelectPaper={handleSelectPaper}
+            totalCount={totalCount}
+          />
         )}
-      </main>
+      </div>
     </div>
   );
 };
