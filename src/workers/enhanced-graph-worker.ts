@@ -698,63 +698,71 @@ async function performAuthorReconciliation() {
   postMessage('app_status/update', { state: 'idle', message: null });
 }
 
-self.addEventListener('message', async (event: MessageEvent<WorkerMessage>) => {
+self.addEventListener('message', (event: MessageEvent<WorkerMessage>) => {
   const { type, payload } = event.data;
-  
-  try {
-    switch (type) {
-      case 'graph/processMasterPaper':
-        console.log("--- [Worker] Received 'graph/processMasterPaper'. Starting Phase A. ---");
-        papers = {};
-        authors = {};
-        institutions = {};
-        authorships = {};
-        paperRelationships = [];
-        externalIdIndex = {};
-        
-        stubCreationThreshold = payload.stub_creation_threshold || 3;
-        
-        postMessage('app_status/update', { state: 'loading', message: 'Processing master paper...' });
-        
-        console.log('[Worker] Phase A, Step 1: Processing Master Paper.');
-        masterPaperUid = await processOpenAlexPaper(payload.paper, false);
-        console.log('[Worker] Phase A, Step 1: Master Paper processed.');
-        
-        if (payload.paper.id) {
-          await fetchFirstDegreeCitations(payload.paper.id);
-          await enrichMasterPaperWithSemanticScholar();
-        }
-        
-        console.log('--- [Worker] Phase A Complete. Posting initial graph to main thread. ---');
-        postMessage('graph/setState', {
-          data: {
-            papers,
-            authors,
-            institutions,
-            authorships,
-            paper_relationships: paperRelationships,
-            external_id_index: externalIdIndex
+
+  // The listener itself is now synchronous.
+  // We handle each message type and kick off async work if needed.
+  switch (type) {
+    case 'graph/processMasterPaper':
+      // We launch the long-running task in a self-invoking async function.
+      // This lets the event listener finish immediately.
+      (async () => {
+        try {
+          console.log("--- [Worker] Received 'graph/processMasterPaper'. Starting Phase A. ---");
+          papers = {};
+          authors = {};
+          institutions = {};
+          authorships = {};
+          paperRelationships = [];
+          externalIdIndex = {};
+          
+          stubCreationThreshold = payload.stub_creation_threshold || 3;
+          
+          postMessage('app_status/update', { state: 'loading', message: 'Processing master paper...' });
+          
+          console.log('[Worker] Phase A, Step 1: Processing Master Paper.');
+          masterPaperUid = await processOpenAlexPaper(payload.paper, false);
+          console.log('[Worker] Phase A, Step 1: Master Paper processed.');
+          
+          if (payload.paper.id) {
+            await fetchFirstDegreeCitations(payload.paper.id);
+            await enrichMasterPaperWithSemanticScholar();
           }
-        });
-        
-        console.log('--- [Worker] Starting Phase B: Background Enrichment. ---');
-        postMessage('app_status/update', { state: 'enriching', message: null });
-        
-        await hydrateMasterPaper();
-        await performAuthorReconciliation();
-        
-        console.log('--- [Worker] Phase B Complete. All enrichment finished. ---');
-        
-        break;
-        
-      default:
-        console.warn('[Worker] Unknown message type:', type);
-    }
-  } catch (error) {
-    console.error('[Worker] A fatal error occurred during graph build:', error);
-    postMessage('error/fatal', { 
-      message: `Worker error: ${error instanceof Error ? error.message : 'Unknown error'}` 
-    });
+          
+          console.log('--- [Worker] Phase A Complete. Posting initial graph to main thread. ---');
+          postMessage('graph/setState', {
+            data: {
+              papers,
+              authors,
+              institutions,
+              authorships,
+              paper_relationships: paperRelationships,
+              external_id_index: externalIdIndex
+            }
+          });
+          
+          console.log('--- [Worker] Starting Phase B: Background Enrichment. ---');
+          postMessage('app_status/update', { state: 'enriching', message: null });
+          
+          await hydrateMasterPaper();
+          await performAuthorReconciliation();
+          
+          console.log('--- [Worker] Phase B Complete. All enrichment finished. ---');
+
+        } catch (error) {
+          // The try/catch block is now inside the async function to correctly handle errors.
+          console.error('[Worker] A fatal error occurred during graph build:', error);
+          postMessage('error/fatal', { 
+            message: `Worker error: ${error instanceof Error ? error.message : 'Unknown error'}` 
+          });
+        }
+      })(); // The '()' here immediately invokes the function
+      
+      break;
+      
+    default:
+      console.warn('[Worker] Unknown message type:', type);
   }
 });
 
