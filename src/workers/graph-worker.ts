@@ -1,4 +1,5 @@
 import { OpenAlexService, openAlexService } from '../services/openAlex';
+import { reconstructAbstract } from '../utils/data-transformers';
 
 // Define the interfaces for the knowledge graph data
 interface Paper {
@@ -128,6 +129,15 @@ function ingestPaper(paperData: any, isStub: boolean): string {
     }
   }
 
+  // Reconstruct abstract if we have the inverted index
+  let abstract: string | null = null;
+  if (paperData.abstract_inverted_index) {
+    abstract = reconstructAbstract(paperData.abstract_inverted_index);
+    if (abstract) {
+      console.log(`[Worker] Successfully reconstructed abstract for: ${paperData.title?.substring(0, 50)}...`);
+    }
+  }
+
   // Create or update the paper record
   graphData.papers[paperUid] = {
     ...graphData.papers[paperUid], // Keep existing data if any
@@ -136,8 +146,7 @@ function ingestPaper(paperData: any, isStub: boolean): string {
     publication_year: paperData.publication_year,
     publication_date: paperData.publication_date || null,
     location: paperData.primary_location?.source?.display_name || null,
-    // Reconstruct abstract only if we have the inverted index
-    abstract: paperData.abstract_inverted_index ? 'Abstract will be reconstructed here' : graphData.papers[paperUid]?.abstract || null,
+    abstract: abstract || graphData.papers[paperUid]?.abstract || null,
     fwci: paperData.fwci || null,
     cited_by_count: paperData.cited_by_count || 0,
     type: paperData.type || 'article',

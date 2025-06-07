@@ -5,7 +5,6 @@ import { PaperSelector } from '@/components/PaperSelector';
 import { AppHeader } from '@/components/AppHeader';
 import { MainAnalysisView } from '@/components/MainAnalysisView';
 import { openAlexService } from '@/services/openAlex';
-import { reconstructAbstract } from '@/utils/data-transformers';
 import { useToast } from '@/hooks/use-toast';
 
 interface PaperResult {
@@ -50,26 +49,7 @@ const Index = () => {
           break;
         case 'graph/setState':
           console.log('[Main Thread] Setting graph state');
-          
-          // Process abstracts before setting state
-          const processedPapers = { ...payload.data.papers };
-          Object.keys(processedPapers).forEach(paperKey => {
-            const paper = processedPapers[paperKey];
-            if (paper.abstract === 'Abstract will be reconstructed here') {
-              // This indicates we have raw data that needs processing
-              // We'll need to get the abstract_inverted_index from somewhere
-              // For now, set to null if it's the placeholder
-              processedPapers[paperKey] = {
-                ...paper,
-                abstract: null
-              };
-            }
-          });
-          
-          setState({
-            ...payload.data,
-            papers: processedPapers
-          });
+          setState(payload.data);
           setAppStatus({ state: 'active', message: null });
           break;
         case 'app/setStatus':
