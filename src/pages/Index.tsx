@@ -1,7 +1,9 @@
+
 import React, { useState, useEffect } from 'react';
 import { SearchBar } from '@/components/SearchBar';
 import { PaperSelector } from '@/components/PaperSelector';
 import { MainAnalysisView } from '@/components/MainAnalysisView';
+import { AppHeader } from '@/components/AppHeader';
 import { useKnowledgeGraphStore } from '@/store/knowledge-graph-store';
 import { workerManager } from '@/services/workerManager';
 import { openAlexService } from '@/services/openAlex';
@@ -116,17 +118,8 @@ const Index = () => {
   if (app_status.state === 'active' || app_status.state === 'enriching') {
     return (
       <div className="min-h-screen bg-background">
+        <AppHeader isEnriching={app_status.state === 'enriching'} />
         <div className="container mx-auto px-4 py-8">
-          {/* Global status indicator for enriching state */}
-          {app_status.state === 'enriching' && (
-            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md text-blue-800 text-sm">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-                Enriching data in the background. Some details may update automatically.
-              </div>
-            </div>
-          )}
-          
           <MainAnalysisView />
         </div>
       </div>
@@ -139,7 +132,7 @@ const Index = () => {
       <div className="w-full max-w-4xl space-y-8">
         <div className="text-center space-y-4">
           <h1 className="text-4xl font-bold tracking-tight">
-            Academic Knowledge Graph Explorer
+            Academic Citation Explorer
           </h1>
           <p className="text-xl text-muted-foreground">
             Search for a research paper to build and analyze its citation network
