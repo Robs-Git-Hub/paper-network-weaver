@@ -1,4 +1,3 @@
-
 import { semanticScholarService } from '../services/semanticScholar';
 import { fetchWithRetry } from '../utils/api-helpers';
 import { reconstructAbstract, extractKeywords, normalizeDoi, calculateMatchScore, generateShortUid } from '../utils/data-transformers';
@@ -213,8 +212,15 @@ async function processOpenAlexInstitution(instData: any): Promise<string> {
 
 async function fetchFirstDegreeCitations(masterPaperOpenAlexId: string) {
   postMessage('progress/update', { message: 'Fetching 1st degree citations...' });
+
+  const normalizeOpenAlexId = (id: string): string => {
+    if (!id) return '';
+    return id.replace('https://openalex.org/', '');
+  };
   
-  const url = `https://api.openalex.org/works?filter=cites:${masterPaperOpenAlexId}&per-page=200&select=id,title,display_name,publication_year,publication_date,primary_location,abstract_inverted_index,fwci,cited_by_count,type,language,keywords,open_access,authorships,referenced_works,related_works`;
+  const normalizedMasterId = normalizeOpenAlexId(masterPaperOpenAlexId);
+
+  const url = `https://api.openalex.org/works?filter=cites:${normalizedMasterId}&per-page=200&select=id,title,display_name,publication_year,publication_date,primary_location,abstract_inverted_index,fwci,cited_by_count,type,language,keywords,open_access,authorships,referenced_works,related_works`;
   
   const response = await fetchWithRetry(url);
   if (!response.ok) {
@@ -223,37 +229,41 @@ async function fetchFirstDegreeCitations(masterPaperOpenAlexId: string) {
   
   const data = await response.json();
   
-  // Track referenced works frequency for stub threshold
   const referencedWorksFreq: Record<string, number> = {};
   const relatedWorksFreq: Record<string, number> = {};
   
-  // Process each citing paper
   for (const paperData of data.results) {
+    if (paperData.id) {
+        paperData.id = normalizeOpenAlexId(paperData.id);
+    }
+
     const paperUid = await processOpenAlexPaper(paperData, false);
     
-    // Create citation relationship
     paperRelationships.push({
       source_short_uid: paperUid,
       target_short_uid: masterPaperUid!,
       relationship_type: 'cites'
     });
     
-    // Count referenced works
     if (paperData.referenced_works) {
-      for (const refWork of paperData.referenced_works) {
-        referencedWorksFreq[refWork] = (referencedWorksFreq[refWork] || 0) + 1;
+      for (const refWorkUrl of paperData.referenced_works) {
+        const cleanId = normalizeOpenAlexId(refWorkUrl);
+        if (cleanId) {
+            referencedWorksFreq[cleanId] = (referencedWorksFreq[cleanId] || 0) + 1;
+        }
       }
     }
     
-    // Count related works
     if (paperData.related_works) {
-      for (const relWork of paperData.related_works) {
-        relatedWorksFreq[relWork] = (relatedWorksFreq[relWork] || 0) + 1;
+      for (const relWorkUrl of paperData.related_works) {
+        const cleanId = normalizeOpenAlexId(relWorkUrl);
+        if (cleanId) {
+            relatedWorksFreq[cleanId] = (relatedWorksFreq[cleanId] || 0) + 1;
+        }
       }
     }
   }
   
-  // Create stubs for frequently referenced works
   const frequentRefs = Object.entries(referencedWorksFreq)
     .filter(([_, count]) => count >= stubCreationThreshold)
     .map(([id, _]) => id);
@@ -276,17 +286,19 @@ async function fetchFirstDegreeCitations(masterPaperOpenAlexId: string) {
 async function createStubsFromOpenAlexIds(openAlexIds: string[], relationshipType: 'cites' | 'similar') {
   if (openAlexIds.length === 0) return;
   
-  const url = `https://api.openalex.org/works?filter=id:${openAlexIds.join('|')}&select=id,title,display_name,publication_year,publication_date,primary_location,cited_by_count,type,authorships`;
+  const url = `https://api.openalex.org/works?filter=openalex:${openAlexIds.join('|')}&select=id,title,display_name,publication_year,publication_date,primary_location,cited_by_count,type,authorships`;
   
   const response = await fetchWithRetry(url);
-  if (!response.ok) return; // Graceful degradation
+  if (!response.ok) {
+    console.warn(`[Worker] Could not fetch stubs for ${relationshipType}. Status: ${response.status}`);
+    return;
+  }
   
   const data = await response.json();
   
   for (const paperData of data.results) {
     const stubUid = await processOpenAlexPaper(paperData, true);
     
-    // Create relationship
     if (relationshipType === 'cites') {
       paperRelationships.push({
         source_short_uid: masterPaperUid!,
@@ -309,7 +321,6 @@ async function enrichMasterPaperWithSemanticScholar() {
   const masterPaper = papers[masterPaperUid];
   if (!masterPaper) return;
   
-  // Find DOI for Semantic Scholar lookup
   const doiKey = Object.keys(externalIdIndex).find(key => 
     key.startsWith('doi:') && externalIdIndex[key] === masterPaperUid
   );
@@ -321,7 +332,6 @@ async function enrichMasterPaperWithSemanticScholar() {
     const ssData = await semanticScholarService.fetchPaperDetails(doi);
     if (!ssData) return;
     
-    // Enrich master paper (only if fields are null)
     const updates: Partial<Paper> = {};
     if (!masterPaper.best_oa_url && ssData.openAccessPdf?.url) {
       updates.best_oa_url = ssData.openAccessPdf.url;
@@ -331,7 +341,6 @@ async function enrichMasterPaperWithSemanticScholar() {
       papers[masterPaperUid] = { ...masterPaper, ...updates };
     }
     
-    // Add external IDs
     if (ssData.paperId) {
       addToExternalIndex('ss', ssData.paperId, masterPaperUid);
     }
@@ -339,7 +348,6 @@ async function enrichMasterPaperWithSemanticScholar() {
       addToExternalIndex('corpusId', ssData.corpusId.toString(), masterPaperUid);
     }
     
-    // Process citations and references as stubs
     await processSemanticScholarRelationships(ssData);
     
   } catch (error) {
@@ -348,7 +356,6 @@ async function enrichMasterPaperWithSemanticScholar() {
 }
 
 async function processSemanticScholarRelationships(ssData: any) {
-  // Process citations (papers that cite the master paper)
   if (ssData.citations) {
     for (const citation of ssData.citations) {
       const stubUid = await processSemanticScholarPaper(citation, true);
@@ -362,7 +369,6 @@ async function processSemanticScholarRelationships(ssData: any) {
     }
   }
   
-  // Process references (papers that the master paper cites)
   if (ssData.references) {
     for (const reference of ssData.references) {
       const stubUid = await processSemanticScholarPaper(reference, true);
@@ -378,7 +384,6 @@ async function processSemanticScholarRelationships(ssData: any) {
 }
 
 async function processSemanticScholarPaper(paperData: any, isStub = true): Promise<string | null> {
-  // Check if paper already exists
   if (paperData.externalIds?.DOI) {
     const normalizedDoi = normalizeDoi(paperData.externalIds.DOI);
     if (normalizedDoi) {
@@ -413,7 +418,6 @@ async function processSemanticScholarPaper(paperData: any, isStub = true): Promi
   
   papers[paperUid] = paper;
   
-  // Add to external index
   if (paperData.paperId) {
     addToExternalIndex('ss', paperData.paperId, paperUid);
   }
@@ -424,7 +428,6 @@ async function processSemanticScholarPaper(paperData: any, isStub = true): Promi
     }
   }
   
-  // Process authors as stubs
   if (paperData.authors) {
     for (let i = 0; i < paperData.authors.length; i++) {
       const authorData = paperData.authors[i];
@@ -469,14 +472,12 @@ async function processSemanticScholarAuthor(authorData: any): Promise<string> {
   return authorUid;
 }
 
-// Phase B Implementation
 async function hydrateMasterPaper() {
   if (!masterPaperUid) return;
   
   const masterPaper = papers[masterPaperUid];
   if (!masterPaper) return;
   
-  // Find OpenAlex ID
   const openAlexKey = Object.keys(externalIdIndex).find(key => 
     key.startsWith('openalex:') && externalIdIndex[key] === masterPaperUid
   );
@@ -495,7 +496,6 @@ async function hydrateMasterPaper() {
     
     const data = await response.json();
     
-    // Update master paper with rich data
     const updatedPaper: Paper = {
       ...masterPaper,
       title: data.title || data.display_name || masterPaper.title,
@@ -515,7 +515,6 @@ async function hydrateMasterPaper() {
     
     papers[masterPaperUid] = updatedPaper;
     
-    // Send update to main thread
     postMessage('papers/updateOne', {
       id: masterPaperUid,
       changes: updatedPaper
@@ -529,7 +528,6 @@ async function hydrateMasterPaper() {
 async function performAuthorReconciliation() {
   postMessage('progress/update', { message: 'Reconciling authors...' });
   
-  // Step 5: Gather stub authors and build reconciliation map
   const stubAuthors = Object.values(authors).filter(author => author.is_stub);
   
   if (stubAuthors.length === 0) {
@@ -537,10 +535,8 @@ async function performAuthorReconciliation() {
     return;
   }
   
-  // Build map of DOIs to stub authors
   const reconciliationMap = new Map<string, any[]>();
   
-  // For each stub author, find their papers and DOIs
   for (const stubAuthor of stubAuthors) {
     const stubAuthorships = Object.values(authorships).filter(
       auth => auth.author_short_uid === stubAuthor.short_uid
@@ -550,7 +546,6 @@ async function performAuthorReconciliation() {
       const paper = papers[authorship.paper_short_uid];
       if (!paper) continue;
       
-      // Find DOI for this paper
       const doiKey = Object.keys(externalIdIndex).find(key => 
         key.startsWith('doi:') && externalIdIndex[key] === paper.short_uid
       );
@@ -574,7 +569,6 @@ async function performAuthorReconciliation() {
     return;
   }
   
-  // Step 6: Fetch OpenAlex data and perform matching
   const dois = Array.from(reconciliationMap.keys());
   const successfulMatches: Array<{
     stubAuthor: Author;
@@ -619,7 +613,6 @@ async function performAuthorReconciliation() {
     console.warn('[Worker] Author reconciliation API call failed:', error);
   }
   
-  // Build and execute merge plan
   if (successfulMatches.length > 0) {
     const mergePlan = new Map<string, {
       winnerUid: string;
@@ -631,26 +624,22 @@ async function performAuthorReconciliation() {
       const openAlexId = match.candidateAuthor.id;
       
       if (!mergePlan.has(openAlexId)) {
-        // First time seeing this OpenAlex author - they become the winner
         mergePlan.set(openAlexId, {
           winnerUid: match.stubAuthor.short_uid,
           loserUids: [],
           canonicalData: match.candidateAuthor
         });
       } else {
-        // Additional stub for this OpenAlex author - add to losers
         const plan = mergePlan.get(openAlexId)!;
         plan.loserUids.push(match.stubAuthor.short_uid);
       }
     }
     
-    // Execute merge plan
     const authorUpdates: Array<{ id: string; changes: Partial<Author> }> = [];
     const authorshipUpdates: Array<{ id: string; changes: Partial<Authorship> }> = [];
     const authorDeletions: string[] = [];
     
     for (const [openAlexId, plan] of mergePlan) {
-      // Update winner with canonical data
       authorUpdates.push({
         id: plan.winnerUid,
         changes: {
@@ -660,10 +649,8 @@ async function performAuthorReconciliation() {
         }
       });
       
-      // Add OpenAlex ID to external index
       addToExternalIndex('openalex_author', openAlexId, plan.winnerUid);
       
-      // Re-parent loser authorships
       for (const loserUid of plan.loserUids) {
         const loserAuthorships = Object.entries(authorships).filter(
           ([_, auth]) => auth.author_short_uid === loserUid
@@ -682,7 +669,6 @@ async function performAuthorReconciliation() {
       }
     }
     
-    // Send merge updates to main thread
     postMessage('graph/applyAuthorMerge', {
       updates: {
         authors: authorUpdates,
@@ -699,14 +685,12 @@ async function performAuthorReconciliation() {
   postMessage('app_status/update', { state: 'active', message: null });
 }
 
-// Message handler
 self.addEventListener('message', async (event: MessageEvent<WorkerMessage>) => {
   const { type, payload } = event.data;
   
   try {
     switch (type) {
       case 'graph/processMasterPaper':
-        // Initialize worker state
         papers = {};
         authors = {};
         institutions = {};
@@ -716,17 +700,14 @@ self.addEventListener('message', async (event: MessageEvent<WorkerMessage>) => {
         
         stubCreationThreshold = payload.stub_creation_threshold || 3;
         
-        // Process master paper
         postMessage('app_status/update', { state: 'loading', message: 'Processing master paper...' });
         masterPaperUid = await processOpenAlexPaper(payload.paper, false);
         
-        // Phase A: Fetch citations and relationships
         if (payload.paper.id) {
           await fetchFirstDegreeCitations(payload.paper.id);
           await enrichMasterPaperWithSemanticScholar();
         }
         
-        // Send initial graph to main thread
         postMessage('graph/setState', {
           data: {
             papers,
@@ -740,7 +721,6 @@ self.addEventListener('message', async (event: MessageEvent<WorkerMessage>) => {
         
         postMessage('app_status/update', { state: 'enriching', message: null });
         
-        // Phase B: Background enrichment
         await hydrateMasterPaper();
         await performAuthorReconciliation();
         
@@ -757,5 +737,4 @@ self.addEventListener('message', async (event: MessageEvent<WorkerMessage>) => {
   }
 });
 
-// Export for TypeScript
 export {};
