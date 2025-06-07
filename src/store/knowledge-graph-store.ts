@@ -54,7 +54,7 @@ export interface ExternalIdType {
 }
 
 export interface AppStatus {
-  state: 'idle' | 'loading' | 'enriching' | 'error';
+  state: 'idle' | 'loading' | 'enriching' | 'active' | 'error';
   message: string | null;
 }
 

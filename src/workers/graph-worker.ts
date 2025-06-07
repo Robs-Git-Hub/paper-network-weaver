@@ -207,6 +207,8 @@ async function enrichMasterPaper(selectedPaper: any) {
       return;
     }
 
+    console.log('[Worker] Master paper enriched with detailed data');
+
     graphData.papers[paperUid] = {
       ...graphData.papers[paperUid],
       title: fullPaperDetails.title || graphData.papers[paperUid].title,
@@ -219,7 +221,7 @@ async function enrichMasterPaper(selectedPaper: any) {
       type: fullPaperDetails.type,
       language: fullPaperDetails.language || null,
       keywords: fullPaperDetails.keywords ? fullPaperDetails.keywords.map(k => k.display_name) : [],
-      best_oa_url: fullPaperDetails.best_oa_location?.url || null,
+      best_oa_url: fullPaperDetails.best_oa_location?.pdf_url || null,
       oa_status: fullPaperDetails.open_access?.oa_status || null,
       is_stub: false // No longer a stub
     };
