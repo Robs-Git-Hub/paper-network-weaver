@@ -4,6 +4,7 @@ import { useKnowledgeGraphStore } from '@/store/knowledge-graph-store';
 import { SearchBar } from '@/components/SearchBar';
 import { PaperSelector } from '@/components/PaperSelector';
 import { AppHeader } from '@/components/AppHeader';
+import { MainAnalysisView } from '@/components/MainAnalysisView';
 import { openAlexService } from '@/services/openAlex';
 import { useToast } from '@/hooks/use-toast';
 
@@ -41,15 +42,19 @@ const Index = () => {
 
     newWorker.onmessage = (e) => {
       const { type, payload } = e.data;
+      console.log('[Main Thread] Received worker message:', type, payload);
       
       switch (type) {
         case 'progress/update':
           setAppStatus({ state: app_status.state, message: payload.message });
           break;
         case 'graph/setState':
-          setState(JSON.parse(payload.data));
+          console.log('[Main Thread] Setting graph state');
+          setState(payload.data);
+          setAppStatus({ state: 'active', message: null });
           break;
         case 'app/setStatus':
+          console.log('[Main Thread] Setting app status:', payload);
           setAppStatus(payload);
           break;
         case 'error/fatal':
@@ -135,7 +140,10 @@ const Index = () => {
 
   const showSearchInterface = app_status.state === 'idle' && searchResults.length === 0;
   const showSearchResults = searchResults.length > 0;
-  const showMainAnalysis = app_status.state !== 'idle' && !showSearchResults;
+  const showMainAnalysis = (app_status.state === 'loading' || app_status.state === 'enriching' || app_status.state === 'active') && !showSearchResults;
+
+  console.log('[Main Thread] Current app status:', app_status);
+  console.log('[Main Thread] Show states:', { showSearchInterface, showSearchResults, showMainAnalysis });
 
   return (
     <div className="min-h-screen bg-background">
@@ -173,12 +181,20 @@ const Index = () => {
         )}
 
         {showMainAnalysis && (
-          <div className="text-center py-20">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#437e84] mx-auto mb-4"></div>
-            <p className="text-muted-foreground">
-              {app_status.message || 'Processing...'}
-            </p>
-          </div>
+          <>
+            {app_status.state === 'loading' && (
+              <div className="text-center py-20">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#437e84] mx-auto mb-4"></div>
+                <p className="text-muted-foreground">
+                  {app_status.message || 'Processing...'}
+                </p>
+              </div>
+            )}
+            
+            {(app_status.state === 'enriching' || app_status.state === 'active') && (
+              <MainAnalysisView />
+            )}
+          </>
         )}
       </main>
     </div>
