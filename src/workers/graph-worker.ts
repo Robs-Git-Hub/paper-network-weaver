@@ -5,6 +5,7 @@ import { generateShortUid, reconstructAbstract, extractKeywords, normalizeDoi } 
 
 interface PaperResult {
   id: string;
+  doi?: string;
   title?: string;
   display_name?: string;
   authorships: Array<{
@@ -19,118 +20,63 @@ interface PaperResult {
   cited_by_count: number;
 }
 
-self.onmessage = async (e) => {
-  const { type, payload } = e.data;
-  
-  console.log('Worker received message:', type, payload);
-  
-  try {
-    switch (type) {
-      case 'graph/processMasterPaper':
-        await processMasterPaper(payload.paper);
-        break;
-      default:
-        console.warn('Unknown worker message type:', type);
-    }
-  } catch (error) {
-    console.error('Worker error:', error);
-    self.postMessage({
-      type: 'error/fatal',
-      payload: { message: error instanceof Error ? error.message : 'Unknown worker error' }
-    });
-  }
+// Simple logger for the worker context
+const logger = {
+  info: (message: string, data?: any) => console.log(`[Worker] ${message}`, data || ''),
+  warn: (message: string, data?: any) => console.warn(`[Worker] ${message}`, data || ''),
+  error: (message: string, data?: any) => console.error(`[Worker] ${message}`, data || '')
 };
 
-async function processMasterPaper(paper: PaperResult) {
-  console.log('Processing master paper:', paper);
-  
-  // Step 1: Update progress
-  self.postMessage({
-    type: 'progress/update',
-    payload: { message: 'Fetching citations from OpenAlex...' }
-  });
-  
-  try {
-    // Step 2A: Fetch 1st degree citations from OpenAlex
-    console.log('Fetching citations for paper ID:', paper.id);
-    const citationsResponse = await openAlexService.fetchCitations(paper.id);
-    console.log('OpenAlex citations response received:', citationsResponse);
-    
-    // Step 2B: Update progress for Semantic Scholar
-    self.postMessage({
-      type: 'progress/update',
-      payload: { message: 'Fetching paper details from Semantic Scholar...' }
-    });
-    
-    // Step 3A: Get DOI from the master paper and fetch from Semantic Scholar
-    let semanticScholarResponse = null;
-    const paperDoi = extractDoiFromPaper(paper);
-    
-    if (paperDoi) {
-      console.log('Fetching Semantic Scholar data for DOI:', paperDoi);
-      try {
-        semanticScholarResponse = await semanticScholarService.fetchPaperDetails(paperDoi);
-        console.log('Semantic Scholar response received:', semanticScholarResponse);
-      } catch (ssError) {
-        console.warn('Semantic Scholar fetch failed:', ssError);
-        // Continue without SS data - this is non-fatal for Phase A
-      }
-    } else {
-      console.warn('No DOI found for master paper, skipping Semantic Scholar fetch');
-    }
-    
-    // Step 4: Update progress
-    self.postMessage({
-      type: 'progress/update',
-      payload: { message: 'Building initial graph...' }
-    });
-    
-    // Step 5: Build initial graph data structure
-    const graphData = buildInitialGraph(paper, citationsResponse.results, semanticScholarResponse);
-    
-    // Step 6: Send complete graph data to main thread
-    self.postMessage({
-      type: 'graph/setState',
-      payload: { data: graphData }
-    });
-    
-    // Step 7: Update app status to show data is ready
-    self.postMessage({
-      type: 'app/setStatus',
-      payload: { state: 'enriching', message: null }
-    });
-    
-    console.log('Initial graph build complete');
-    
-  } catch (error) {
-    console.error('Error in processMasterPaper:', error);
-    throw error;
-  }
-}
-
 function extractDoiFromPaper(paper: PaperResult): string | null {
-  // For now, we'll need to fetch the full paper details to get the DOI
-  // This is a limitation of the current search response not including DOI
-  console.log('Need to implement DOI extraction - paper search results don\'t include DOI');
-  return null; // Will implement DOI extraction in next step
+  if (paper.doi) {
+    // Use the normalizeDoi utility to clean the DOI
+    return normalizeDoi(paper.doi);
+  }
+  logger.warn('No DOI found for master paper:', { title: paper.title });
+  return null;
 }
 
-function buildInitialGraph(masterPaper: PaperResult, openAlexCitations: any[], semanticScholarData: any | null) {
-  console.log('Building initial graph with:', {
-    masterPaper: masterPaper.title,
-    openAlexCitations: openAlexCitations.length,
-    hasSemanticScholarData: !!semanticScholarData
-  });
-  
-  const papers: Record<string, any> = {};
-  const authors: Record<string, any> = {};
-  const institutions: Record<string, any> = {};
-  const authorships: Record<string, any> = {};
+async function buildInitialGraph(masterPaper: PaperResult) {
+  logger.info('Starting initial graph build for master paper:', { title: masterPaper.title });
+
+  // Initialize data structures
+  const papers: any = {};
+  const authors: any = {};
+  const institutions: any = {};
+  const authorships: any = {};
   const paper_relationships: any[] = [];
-  const external_id_index: Record<string, string> = {};
+  const external_id_index: any = {};
   
-  // Process master paper
+  // Set for tracking relationships to prevent duplicates
+  const relationship_set = new Set<string>();
+
+  // Helper function to add relationships without duplicates
+  const addRelationship = (source: string, target: string, type: 'cites' | 'similar') => {
+    const key = `${source}|${type}|${target}`;
+    if (!relationship_set.has(key)) {
+      relationship_set.add(key);
+      paper_relationships.push({
+        source_short_uid: source,
+        target_short_uid: target,
+        relationship_type: type
+      });
+    }
+  };
+
+  // Create master paper record
   const masterPaperUid = generateShortUid();
+  const masterPaperOpenAlexId = masterPaper.id.replace('https://openalex.org/', '');
+  
+  // Add to external ID index
+  external_id_index[`openalex:${masterPaper.id}`] = masterPaperUid;
+  
+  // Extract and index DOI if available
+  const masterDoi = extractDoiFromPaper(masterPaper);
+  if (masterDoi) {
+    external_id_index[`doi:${masterDoi}`] = masterPaperUid;
+  }
+
+  // Create master paper record
   papers[masterPaperUid] = {
     short_uid: masterPaperUid,
     title: masterPaper.title || masterPaper.display_name || 'Untitled',
@@ -147,60 +93,74 @@ function buildInitialGraph(masterPaper: PaperResult, openAlexCitations: any[], s
     oa_status: null,
     is_stub: false
   };
-  
-  // Index master paper by OpenAlex ID
-  external_id_index[`openalex:${masterPaper.id}`] = masterPaperUid;
-  
-  console.log('Master paper processed:', papers[masterPaperUid]);
-  
-  // Process OpenAlex citations (1st degree)
-  openAlexCitations.forEach((citation, index) => {
-    console.log(`Processing OpenAlex citation ${index + 1}:`, citation);
-    
+
+  // API Call 2: Fetch OpenAlex citations
+  self.postMessage({
+    type: 'progress/update',
+    payload: { message: 'Fetching citations from OpenAlex...' }
+  });
+
+  let openAlexCitations: any[] = [];
+  try {
+    const citationsResponse = await openAlexService.fetchCitations(masterPaper.id);
+    openAlexCitations = citationsResponse.results || [];
+    logger.info(`Found ${openAlexCitations.length} citations from OpenAlex`);
+  } catch (error) {
+    logger.error('Failed to fetch OpenAlex citations:', error);
+    // Continue without citations - this is not fatal for Phase A
+  }
+
+  // Process OpenAlex citations
+  openAlexCitations.forEach((citation: any) => {
     const citationUid = generateShortUid();
-    papers[citationUid] = {
-      short_uid: citationUid,
-      title: citation.title || citation.display_name || 'Untitled',
-      publication_year: citation.publication_year,
-      publication_date: citation.publication_date,
-      location: citation.primary_location?.source?.display_name || null,
-      abstract: citation.abstract_inverted_index ? reconstructAbstract(citation.abstract_inverted_index) : null,
-      fwci: citation.fwci || null,
-      cited_by_count: citation.cited_by_count || 0,
-      type: citation.type || 'article',
-      language: citation.language || null,
-      keywords: citation.keywords ? extractKeywords(citation.keywords) : [],
-      best_oa_url: citation.best_oa_location?.pdf_url || null,
-      oa_status: citation.open_access?.oa_status || null,
-      is_stub: false
-    };
+    const citationOpenAlexId = citation.id;
     
-    // Index citation by OpenAlex ID
-    external_id_index[`openalex:${citation.id}`] = citationUid;
+    // Add to external ID index
+    external_id_index[`openalex:${citationOpenAlexId}`] = citationUid;
     
-    // Index by DOI if present
+    // Process DOI if available
     if (citation.doi) {
       const normalizedDoi = normalizeDoi(citation.doi);
       if (normalizedDoi) {
         external_id_index[`doi:${normalizedDoi}`] = citationUid;
       }
     }
-    
-    // Create relationship: citation cites master paper
-    paper_relationships.push({
-      source_short_uid: citationUid,
-      target_short_uid: masterPaperUid,
-      relationship_type: 'cites'
-    });
+    if (citation.ids?.doi) {
+      const normalizedDoi = normalizeDoi(citation.ids.doi);
+      if (normalizedDoi) {
+        external_id_index[`doi:${normalizedDoi}`] = citationUid;
+      }
+    }
 
-    // Process referenced works (Rule 2.4: "Paper A cites Paper B")
+    // Create paper record
+    papers[citationUid] = {
+      short_uid: citationUid,
+      title: citation.title || 'Untitled',
+      publication_year: citation.publication_year,
+      publication_date: citation.publication_date,
+      location: citation.primary_location?.source?.display_name || null,
+      abstract: reconstructAbstract(citation.abstract_inverted_index),
+      fwci: citation.fwci,
+      cited_by_count: citation.cited_by_count || 0,
+      type: citation.type || 'article',
+      language: citation.language,
+      keywords: extractKeywords(citation.keywords),
+      best_oa_url: citation.best_oa_location?.pdf_url || null,
+      oa_status: citation.open_access?.oa_status || null,
+      is_stub: false
+    };
+
+    // Create relationship: citation cites master paper
+    addRelationship(citationUid, masterPaperUid, 'cites');
+
+    // Process referenced works (papers this citation cites)
     (citation.referenced_works || []).forEach((targetOpenAlexId: string) => {
-      if (!targetOpenAlexId) return; // Skip null/empty IDs
+      if (!targetOpenAlexId) return;
       
       const targetIdWithPrefix = `openalex:${targetOpenAlexId}`;
       let targetUid = external_id_index[targetIdWithPrefix];
 
-      // If we've never seen this paper before, create a stub for it.
+      // If we've never seen this paper before, create a stub for it
       if (!targetUid) {
         targetUid = generateShortUid();
         external_id_index[targetIdWithPrefix] = targetUid;
@@ -222,18 +182,14 @@ function buildInitialGraph(masterPaper: PaperResult, openAlexCitations: any[], s
         };
       }
       
-      // Create the relationship: "citation" CITES "target"
-      paper_relationships.push({
-        source_short_uid: citationUid,
-        target_short_uid: targetUid,
-        relationship_type: 'cites'
-      });
+      // Create the relationship: citation cites target
+      addRelationship(citationUid, targetUid, 'cites');
     });
 
-    // Process related works (Rule 2.4: "Paper A is similar to Paper B")
+    // Process related works (similar papers)
     (citation.related_works || []).forEach((targetOpenAlexId: string) => {
       if (!targetOpenAlexId) return;
-    
+      
       const targetIdWithPrefix = `openalex:${targetOpenAlexId}`;
       let targetUid = external_id_index[targetIdWithPrefix];
 
@@ -257,178 +213,282 @@ function buildInitialGraph(masterPaper: PaperResult, openAlexCitations: any[], s
           is_stub: true
         };
       }
-    
-      paper_relationships.push({
-        source_short_uid: citationUid,
-        target_short_uid: targetUid,
-        relationship_type: 'similar'
+      
+      // Create the relationship: citation is similar to target
+      addRelationship(citationUid, targetUid, 'similar');
+    });
+
+    // Process authorships for this citation
+    (citation.authorships || []).forEach((authorship: any, index: number) => {
+      const authorUid = generateShortUid();
+      const authorOpenAlexId = authorship.author?.id;
+      
+      if (authorOpenAlexId) {
+        external_id_index[`openalex:${authorOpenAlexId}`] = authorUid;
+      }
+      
+      if (authorship.author?.orcid) {
+        external_id_index[`orcid:${authorship.author.orcid}`] = authorUid;
+      }
+
+      // Create author record
+      authors[authorUid] = {
+        short_uid: authorUid,
+        clean_name: authorship.author?.display_name || 'Unknown Author',
+        orcid: authorship.author?.orcid || null,
+        is_stub: false
+      };
+
+      // Create authorship record
+      const authorshipId = `${citationUid}_${authorUid}`;
+      authorships[authorshipId] = {
+        paper_short_uid: citationUid,
+        author_short_uid: authorUid,
+        author_position: authorship.author_position || index,
+        is_corresponding: authorship.is_corresponding || false,
+        raw_author_name: authorship.raw_author_name,
+        institution_uids: []
+      };
+
+      // Process institutions
+      (authorship.institutions || []).forEach((institution: any) => {
+        const institutionUid = generateShortUid();
+        const institutionOpenAlexId = institution.id;
+        
+        if (institutionOpenAlexId) {
+          external_id_index[`openalex:${institutionOpenAlexId}`] = institutionUid;
+        }
+        
+        if (institution.ror) {
+          external_id_index[`ror:${institution.ror}`] = institutionUid;
+        }
+
+        institutions[institutionUid] = {
+          short_uid: institutionUid,
+          ror_id: institution.ror || null,
+          display_name: institution.display_name || 'Unknown Institution',
+          country_code: institution.country_code || null,
+          type: institution.type || null
+        };
+
+        // Add institution to authorship
+        authorships[authorshipId].institution_uids.push(institutionUid);
       });
     });
   });
-  
-  // Process Semantic Scholar data if available
-  if (semanticScholarData) {
-    console.log('Processing Semantic Scholar data...');
-    
-    // 1. Enrich the Master Paper itself
-    const masterPaperRecord = papers[masterPaperUid];
-    if (masterPaperRecord) {
-      masterPaperRecord.best_oa_url = masterPaperRecord.best_oa_url || semanticScholarData.openAccessPdf?.url || null;
-      // Add other enrichment fields here if needed
-    }
-    
-    // Process SS citations
-    if (semanticScholarData.citations) {
-      semanticScholarData.citations.forEach((ssCitation: any, index: number) => {
-        console.log(`Processing SS citation ${index + 1}:`, ssCitation);
-        
-        // Check if this paper already exists (by DOI matching)
-        let existingUid = null;
-        if (ssCitation.externalIds?.DOI) {
-          const normalizedDoi = normalizeDoi(ssCitation.externalIds.DOI);
-          if (normalizedDoi) {
-            existingUid = external_id_index[`doi:${normalizedDoi}`];
+
+  // API Call 3: Fetch Semantic Scholar data
+  if (masterDoi) {
+    self.postMessage({
+      type: 'progress/update',
+      payload: { message: 'Enriching with Semantic Scholar data...' }
+    });
+
+    try {
+      const semanticScholarData = await semanticScholarService.fetchPaperDetails(masterDoi);
+      
+      if (semanticScholarData) {
+        logger.info('Found Semantic Scholar data for master paper');
+
+        // Enrich the master paper with SS data
+        const masterPaperRecord = papers[masterPaperUid];
+        if (masterPaperRecord) {
+          masterPaperRecord.best_oa_url = masterPaperRecord.best_oa_url || semanticScholarData.openAccessPdf?.url || null;
+          
+          // Add SS external IDs
+          if (semanticScholarData.paperId) {
+            external_id_index[`ss:${semanticScholarData.paperId}`] = masterPaperUid;
+          }
+          if (semanticScholarData.corpusId) {
+            external_id_index[`corpusId:${semanticScholarData.corpusId}`] = masterPaperUid;
           }
         }
-        
-        if (!existingUid) {
-          // Create new paper with stub status
-          const ssCitationUid = generateShortUid();
-          papers[ssCitationUid] = {
-            short_uid: ssCitationUid,
-            title: ssCitation.title || 'Untitled',
-            publication_year: ssCitation.year,
-            publication_date: null,
-            location: ssCitation.venue || null,
-            abstract: ssCitation.abstract || null,
-            fwci: null,
-            cited_by_count: ssCitation.citationCount || 0,
-            type: 'article',
-            language: null,
-            keywords: [],
-            best_oa_url: ssCitation.openAccessPdf?.url || null,
-            oa_status: null,
-            is_stub: true // SS-discovered papers are stubs initially
-          };
-          
-          // Index by SS ID
-          external_id_index[`ss:${ssCitation.paperId}`] = ssCitationUid;
-          
-          // Index by DOI if present
-          if (ssCitation.externalIds?.DOI) {
-            const normalizedDoi = normalizeDoi(ssCitation.externalIds.DOI);
-            if (normalizedDoi) {
-              external_id_index[`doi:${normalizedDoi}`] = ssCitationUid;
+
+        // Process SS citations
+        if (semanticScholarData.citations) {
+          semanticScholarData.citations.forEach((ssCitation: any) => {
+            let existingUid = null;
+            if (ssCitation.externalIds?.DOI) {
+              const normalizedDoi = normalizeDoi(ssCitation.externalIds.DOI);
+              if (normalizedDoi) {
+                existingUid = external_id_index[`doi:${normalizedDoi}`];
+              }
             }
-          }
-          
-          // Create relationship: SS citation cites master paper
-          paper_relationships.push({
-            source_short_uid: ssCitationUid,
-            target_short_uid: masterPaperUid,
-            relationship_type: 'cites'
-          });
-        } else {
-          // Enrich existing paper with SS data only if fields are empty
-          const existingPaper = papers[existingUid];
-          if (existingPaper) {
-            existingPaper.abstract = existingPaper.abstract || ssCitation.abstract || null;
-            existingPaper.location = existingPaper.location || ssCitation.venue || null;
-            existingPaper.best_oa_url = existingPaper.best_oa_url || ssCitation.openAccessPdf?.url || null;
-          }
-          
-          // Even if the paper exists, the relationship might not.
-          // Create the "cites" link from the SS paper to the master paper.
-          paper_relationships.push({
-            source_short_uid: existingUid,
-            target_short_uid: masterPaperUid,
-            relationship_type: 'cites'
-          });
-        }
-      });
-    }
-    
-    // Process SS references
-    if (semanticScholarData.references) {
-      semanticScholarData.references.forEach((ssReference: any, index: number) => {
-        console.log(`Processing SS reference ${index + 1}:`, ssReference);
-        
-        // Check if this paper already exists (by DOI matching)
-        let existingUid = null;
-        if (ssReference.externalIds?.DOI) {
-          const normalizedDoi = normalizeDoi(ssReference.externalIds.DOI);
-          if (normalizedDoi) {
-            existingUid = external_id_index[`doi:${normalizedDoi}`];
-          }
-        }
-        
-        if (!existingUid) {
-          // Create new paper with stub status
-          const ssReferenceUid = generateShortUid();
-          papers[ssReferenceUid] = {
-            short_uid: ssReferenceUid,
-            title: ssReference.title || 'Untitled',
-            publication_year: ssReference.year,
-            publication_date: null,
-            location: ssReference.venue || null,
-            abstract: ssReference.abstract || null,
-            fwci: null,
-            cited_by_count: ssReference.citationCount || 0,
-            type: 'article',
-            language: null,
-            keywords: [],
-            best_oa_url: ssReference.openAccessPdf?.url || null,
-            oa_status: null,
-            is_stub: true // SS-discovered papers are stubs initially
-          };
-          
-          // Index by SS ID
-          external_id_index[`ss:${ssReference.paperId}`] = ssReferenceUid;
-          
-          // Index by DOI if present
-          if (ssReference.externalIds?.DOI) {
-            const normalizedDoi = normalizeDoi(ssReference.externalIds.DOI);
-            if (normalizedDoi) {
-              external_id_index[`doi:${normalizedDoi}`] = ssReferenceUid;
+            
+            if (!existingUid) {
+              // Create new stub paper
+              const newUid = generateShortUid();
+              
+              // Add to external ID index
+              if (ssCitation.paperId) {
+                external_id_index[`ss:${ssCitation.paperId}`] = newUid;
+              }
+              if (ssCitation.externalIds?.DOI) {
+                const normalizedDoi = normalizeDoi(ssCitation.externalIds.DOI);
+                if (normalizedDoi) {
+                  external_id_index[`doi:${normalizedDoi}`] = newUid;
+                }
+              }
+              if (ssCitation.externalIds?.CorpusId) {
+                external_id_index[`corpusId:${ssCitation.externalIds.CorpusId}`] = newUid;
+              }
+
+              papers[newUid] = {
+                short_uid: newUid,
+                title: ssCitation.title || 'Unknown Title (Stub)',
+                publication_year: ssCitation.year,
+                publication_date: null,
+                location: ssCitation.venue || null,
+                abstract: ssCitation.abstract || null,
+                fwci: null,
+                cited_by_count: ssCitation.citationCount || 0,
+                type: 'article',
+                language: null,
+                keywords: [],
+                best_oa_url: ssCitation.openAccessPdf?.url || null,
+                oa_status: null,
+                is_stub: true
+              };
+
+              // Create stub authors
+              (ssCitation.authors || []).forEach((author: any) => {
+                const authorUid = generateShortUid();
+                
+                if (author.authorId) {
+                  external_id_index[`ss:${author.authorId}`] = authorUid;
+                }
+
+                authors[authorUid] = {
+                  short_uid: authorUid,
+                  clean_name: author.name || 'Unknown Author',
+                  orcid: null,
+                  is_stub: true
+                };
+
+                const authorshipId = `${newUid}_${authorUid}`;
+                authorships[authorshipId] = {
+                  paper_short_uid: newUid,
+                  author_short_uid: authorUid,
+                  author_position: 0,
+                  is_corresponding: false,
+                  raw_author_name: author.name,
+                  institution_uids: []
+                };
+              });
+
+              existingUid = newUid;
+            } else {
+              // Enrich existing paper with SS data
+              const existingPaper = papers[existingUid];
+              if (existingPaper) {
+                existingPaper.abstract = existingPaper.abstract || ssCitation.abstract || null;
+                existingPaper.location = existingPaper.location || ssCitation.venue || null;
+                existingPaper.best_oa_url = existingPaper.best_oa_url || ssCitation.openAccessPdf?.url || null;
+              }
             }
-          }
-          
-          // Create relationship: master paper cites SS reference
-          paper_relationships.push({
-            source_short_uid: masterPaperUid,
-            target_short_uid: ssReferenceUid,
-            relationship_type: 'cites'
-          });
-        } else {
-          // Enrich existing paper with SS data only if fields are empty
-          const existingPaper = papers[existingUid];
-          if (existingPaper) {
-            existingPaper.abstract = existingPaper.abstract || ssReference.abstract || null;
-            existingPaper.location = existingPaper.location || ssReference.venue || null;
-            existingPaper.best_oa_url = existingPaper.best_oa_url || ssReference.openAccessPdf?.url || null;
-          }
-          
-          // Even if the paper exists, the relationship might not.
-          // Create the "cites" link from the master paper to the SS reference.
-          paper_relationships.push({
-            source_short_uid: masterPaperUid,
-            target_short_uid: existingUid,
-            relationship_type: 'cites'
+
+            // Create relationship: SS citation cites master paper
+            addRelationship(existingUid, masterPaperUid, 'cites');
           });
         }
-      });
+
+        // Process SS references (papers the master paper cites)
+        if (semanticScholarData.references) {
+          semanticScholarData.references.forEach((ssReference: any) => {
+            let existingUid = null;
+            if (ssReference.externalIds?.DOI) {
+              const normalizedDoi = normalizeDoi(ssReference.externalIds.DOI);
+              if (normalizedDoi) {
+                existingUid = external_id_index[`doi:${normalizedDoi}`];
+              }
+            }
+            
+            if (!existingUid) {
+              // Create new stub paper
+              const newUid = generateShortUid();
+              
+              // Add to external ID index
+              if (ssReference.paperId) {
+                external_id_index[`ss:${ssReference.paperId}`] = newUid;
+              }
+              if (ssReference.externalIds?.DOI) {
+                const normalizedDoi = normalizeDoi(ssReference.externalIds.DOI);
+                if (normalizedDoi) {
+                  external_id_index[`doi:${normalizedDoi}`] = newUid;
+                }
+              }
+              if (ssReference.externalIds?.CorpusId) {
+                external_id_index[`corpusId:${ssReference.externalIds.CorpusId}`] = newUid;
+              }
+
+              papers[newUid] = {
+                short_uid: newUid,
+                title: ssReference.title || 'Unknown Title (Stub)',
+                publication_year: ssReference.year,
+                publication_date: null,
+                location: ssReference.venue || null,
+                abstract: ssReference.abstract || null,
+                fwci: null,
+                cited_by_count: ssReference.citationCount || 0,
+                type: 'article',
+                language: null,
+                keywords: [],
+                best_oa_url: ssReference.openAccessPdf?.url || null,
+                oa_status: null,
+                is_stub: true
+              };
+
+              // Create stub authors
+              (ssReference.authors || []).forEach((author: any) => {
+                const authorUid = generateShortUid();
+                
+                if (author.authorId) {
+                  external_id_index[`ss:${author.authorId}`] = authorUid;
+                }
+
+                authors[authorUid] = {
+                  short_uid: authorUid,
+                  clean_name: author.name || 'Unknown Author',
+                  orcid: null,
+                  is_stub: true
+                };
+
+                const authorshipId = `${newUid}_${authorUid}`;
+                authorships[authorshipId] = {
+                  paper_short_uid: newUid,
+                  author_short_uid: authorUid,
+                  author_position: 0,
+                  is_corresponding: false,
+                  raw_author_name: author.name,
+                  institution_uids: []
+                };
+              });
+
+              existingUid = newUid;
+            } else {
+              // Enrich existing paper with SS data
+              const existingPaper = papers[existingUid];
+              if (existingPaper) {
+                existingPaper.abstract = existingPaper.abstract || ssReference.abstract || null;
+                existingPaper.location = existingPaper.location || ssReference.venue || null;
+                existingPaper.best_oa_url = existingPaper.best_oa_url || ssReference.openAccessPdf?.url || null;
+              }
+            }
+
+            // Create relationship: master paper cites SS reference
+            addRelationship(masterPaperUid, existingUid, 'cites');
+          });
+        }
+      }
+    } catch (error) {
+      logger.error('Failed to fetch Semantic Scholar data:', error);
+      // Continue without SS data - this is not fatal for Phase A
     }
+  } else {
+    logger.warn('No DOI available for Semantic Scholar lookup');
   }
-  
-  console.log('Graph data built:', {
-    papers: Object.keys(papers).length,
-    authors: Object.keys(authors).length,
-    institutions: Object.keys(institutions).length,
-    authorships: Object.keys(authorships).length,
-    paper_relationships: paper_relationships.length,
-    external_id_index: Object.keys(external_id_index).length
-  });
-  
+
+  // Return the complete graph data
   return {
     papers,
     authors,
@@ -438,3 +498,48 @@ function buildInitialGraph(masterPaper: PaperResult, openAlexCitations: any[], s
     external_id_index
   };
 }
+
+// Worker message handler
+self.onmessage = async function(e) {
+  const { type, payload } = e.data;
+  
+  try {
+    switch (type) {
+      case 'graph/processMasterPaper':
+        logger.info('Processing master paper:', payload.paper);
+        
+        // Update status to loading
+        self.postMessage({
+          type: 'app/setStatus',
+          payload: { state: 'loading', message: 'Building initial graph...' }
+        });
+
+        // Build the initial graph
+        const graphData = await buildInitialGraph(payload.paper);
+        
+        // Send the complete graph data to the main thread
+        self.postMessage({
+          type: 'graph/setState',
+          payload: { data: graphData }
+        });
+
+        // Update status to active
+        self.postMessage({
+          type: 'app/setStatus',
+          payload: { state: 'active', message: null }
+        });
+
+        logger.info('Initial graph build completed');
+        break;
+        
+      default:
+        logger.warn('Unknown message type:', type);
+    }
+  } catch (error) {
+    logger.error('Worker error:', error);
+    self.postMessage({
+      type: 'error/fatal',
+      payload: { message: error instanceof Error ? error.message : 'Unknown worker error' }
+    });
+  }
+};

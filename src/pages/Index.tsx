@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 
 interface PaperResult {
   id: string;
+  doi?: string;
   title?: string;
   display_name?: string;
   authorships: Array<{
@@ -80,6 +81,7 @@ const Index = () => {
       // Transform the results to match our expected interface
       const transformedResults = response.results.map(paper => ({
         id: paper.id,
+        doi: paper.doi,
         title: paper.title || paper.display_name || 'Untitled',
         display_name: paper.display_name,
         authorships: paper.authorships || [],
