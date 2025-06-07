@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useKnowledgeGraphStore } from '@/store/knowledge-graph-store';
 import { SearchBar } from '@/components/SearchBar';
@@ -6,6 +5,7 @@ import { PaperSelector } from '@/components/PaperSelector';
 import { AppHeader } from '@/components/AppHeader';
 import { MainAnalysisView } from '@/components/MainAnalysisView';
 import { openAlexService } from '@/services/openAlex';
+import { reconstructAbstract } from '@/utils/data-transformers';
 import { useToast } from '@/hooks/use-toast';
 
 interface PaperResult {
@@ -31,7 +31,7 @@ const Index = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [worker, setWorker] = useState<Worker | null>(null);
   
-  const { app_status, setAppStatus, setState } = useKnowledgeGraphStore();
+  const { app_status, setAppStatus, setState, papers } = useKnowledgeGraphStore();
   const { toast } = useToast();
 
   // Initialize web worker
@@ -50,7 +50,26 @@ const Index = () => {
           break;
         case 'graph/setState':
           console.log('[Main Thread] Setting graph state');
-          setState(payload.data);
+          
+          // Process abstracts before setting state
+          const processedPapers = { ...payload.data.papers };
+          Object.keys(processedPapers).forEach(paperKey => {
+            const paper = processedPapers[paperKey];
+            if (paper.abstract === 'Abstract will be reconstructed here') {
+              // This indicates we have raw data that needs processing
+              // We'll need to get the abstract_inverted_index from somewhere
+              // For now, set to null if it's the placeholder
+              processedPapers[paperKey] = {
+                ...paper,
+                abstract: null
+              };
+            }
+          });
+          
+          setState({
+            ...payload.data,
+            papers: processedPapers
+          });
           setAppStatus({ state: 'active', message: null });
           break;
         case 'app/setStatus':

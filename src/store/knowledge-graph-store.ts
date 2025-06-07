@@ -1,4 +1,6 @@
+
 import { create } from 'zustand';
+import { reconstructAbstract } from '@/utils/data-transformers';
 
 // Define the interfaces for the knowledge graph data
 export interface Paper {
@@ -84,9 +86,10 @@ interface KnowledgeGraphStore {
     paper_relationships: PaperRelationship[];
     external_id_index: Record<string, string>;
   }) => void;
+  updatePaperAbstract: (paperUid: string, abstractData: Record<string, number[]> | string | null) => void;
 }
 
-export const useKnowledgeGraphStore = create<KnowledgeGraphStore>((set) => ({
+export const useKnowledgeGraphStore = create<KnowledgeGraphStore>((set, get) => ({
   // Initial state
   papers: {},
   authors: {},
@@ -104,12 +107,53 @@ export const useKnowledgeGraphStore = create<KnowledgeGraphStore>((set) => ({
     app_status: { ...state.app_status, ...status }
   })),
 
-  setState: (data) => set({
-    papers: data.papers,
-    authors: data.authors,
-    institutions: data.institutions,
-    authorships: data.authorships,
-    paper_relationships: data.paper_relationships,
-    external_id_index: data.external_id_index
-  })
+  setState: (data) => {
+    // Process papers to reconstruct abstracts if needed
+    const processedPapers = { ...data.papers };
+    
+    Object.keys(processedPapers).forEach(paperKey => {
+      const paper = processedPapers[paperKey];
+      if (paper.abstract === 'Abstract will be reconstructed here') {
+        // For now, set to null - in a real scenario we'd have the raw data
+        processedPapers[paperKey] = {
+          ...paper,
+          abstract: null
+        };
+      }
+    });
+    
+    set({
+      papers: processedPapers,
+      authors: data.authors,
+      institutions: data.institutions,
+      authorships: data.authorships,
+      paper_relationships: data.paper_relationships,
+      external_id_index: data.external_id_index
+    });
+  },
+
+  updatePaperAbstract: (paperUid: string, abstractData: Record<string, number[]> | string | null) => {
+    const { papers } = get();
+    const paper = papers[paperUid];
+    
+    if (!paper) return;
+    
+    let abstract: string | null = null;
+    
+    if (typeof abstractData === 'string') {
+      abstract = abstractData;
+    } else if (abstractData && typeof abstractData === 'object') {
+      abstract = reconstructAbstract(abstractData);
+    }
+    
+    set({
+      papers: {
+        ...papers,
+        [paperUid]: {
+          ...paper,
+          abstract
+        }
+      }
+    });
+  }
 }));
