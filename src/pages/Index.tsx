@@ -9,8 +9,11 @@ import { useToast } from '@/hooks/use-toast';
 
 interface PaperResult {
   id: string;
-  title: string;
-  authors: Array<{ display_name: string }>;
+  title?: string;
+  display_name?: string;
+  authorships: Array<{
+    author: { display_name: string };
+  }>;
   publication_year: number | null;
   primary_location?: {
     source?: {
@@ -34,7 +37,18 @@ const Index = () => {
       console.log('Searching for:', query);
       const response = await openAlexService.searchPapers(query);
       
-      setSearchResults(response.results);
+      // Transform the results to match our expected interface
+      const transformedResults = response.results.map(paper => ({
+        id: paper.id,
+        title: paper.title || paper.display_name || 'Untitled',
+        display_name: paper.display_name,
+        authorships: paper.authorships || [],
+        publication_year: paper.publication_year,
+        primary_location: paper.primary_location,
+        cited_by_count: paper.cited_by_count || 0
+      }));
+      
+      setSearchResults(transformedResults);
       setTotalCount(response.meta.count);
       
       toast({
@@ -65,7 +79,7 @@ const Index = () => {
     // For now, just show loading state
     toast({
       title: "Paper selected",
-      description: `Processing "${paper.title}"...`
+      description: `Processing "${paper.title || paper.display_name}"...`
     });
   };
 

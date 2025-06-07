@@ -2,11 +2,24 @@
 interface OpenAlexSearchResponse {
   results: Array<{
     id: string;
-    title: string;
-    authors: Array<{
-      id: string;
-      display_name: string;
-      orcid?: string;
+    title?: string;
+    display_name?: string;
+    authorships: Array<{
+      author_position: number;
+      is_corresponding: boolean;
+      raw_author_name: string | null;
+      author: {
+        id: string;
+        display_name: string;
+        orcid?: string;
+      };
+      institutions: Array<{
+        id: string;
+        display_name: string;
+        ror?: string;
+        country_code?: string;
+        type?: string;
+      }>;
     }>;
     publication_year: number | null;
     publication_date: string | null;
@@ -47,7 +60,8 @@ export class OpenAlexService {
   
   async searchPapers(query: string): Promise<OpenAlexSearchResponse> {
     const encodedQuery = encodeURIComponent(query);
-    const url = `${this.baseUrl}/works?search=${encodedQuery}&per_page=25&select=id,title,authors,publication_year,publication_date,primary_location,cited_by_count,type,language,keywords,open_access,doi`;
+    // Updated to use correct OpenAlex field names based on the tested API calls
+    const url = `${this.baseUrl}/works?filter=title.search:${encodedQuery}&select=id,doi,display_name,publication_year,authorships&per_page=25`;
     
     console.log('OpenAlex search URL:', url);
     

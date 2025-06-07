@@ -5,8 +5,11 @@ import { Badge } from '@/components/ui/badge';
 
 interface PaperResult {
   id: string;
-  title: string;
-  authors: Array<{ display_name: string }>;
+  title?: string;
+  display_name?: string;
+  authorships: Array<{
+    author: { display_name: string };
+  }>;
   publication_year: number | null;
   primary_location?: {
     source?: {
@@ -45,13 +48,13 @@ export const PaperSelector: React.FC<PaperSelectorProps> = ({
             <CardContent className="p-4">
               <div className="space-y-2">
                 <h3 className="font-medium text-gray-900 leading-tight">
-                  {paper.title}
+                  {paper.title || paper.display_name || 'Untitled'}
                 </h3>
                 
                 <div className="flex items-center gap-2 text-sm text-gray-600">
                   <span>
-                    {paper.authors.slice(0, 3).map(a => a.display_name).join(', ')}
-                    {paper.authors.length > 3 && ` +${paper.authors.length - 3} more`}
+                    {paper.authorships.slice(0, 3).map(a => a.author.display_name).join(', ')}
+                    {paper.authorships.length > 3 && ` +${paper.authorships.length - 3} more`}
                   </span>
                   {paper.publication_year && (
                     <>
