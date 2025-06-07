@@ -66,7 +66,7 @@ const Index = () => {
     setTotalCount(undefined);
     
     // Reset any previous error state
-    setAppStatus({ state: 'idle', message: null });
+    setAppStatus({ state: 'loading', message: 'Processing your selected paper.' });
     
     // Start processing with the worker
     workerManager.processMasterPaper(paper);
