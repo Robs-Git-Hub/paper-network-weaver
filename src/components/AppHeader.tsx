@@ -2,16 +2,28 @@
 import React from 'react';
 import { MoreHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useKnowledgeGraphStore } from '@/store/knowledge-graph-store';
 
 interface AppHeaderProps {
   isEnriching?: boolean;
 }
 
 export const AppHeader: React.FC<AppHeaderProps> = ({ isEnriching }) => {
+  const { setAppStatus } = useKnowledgeGraphStore();
+
+  const handleLogoClick = () => {
+    setAppStatus({ state: 'idle', message: null });
+  };
+
   return (
     <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-14 items-center justify-between">
-        <h1 className="text-lg font-semibold">ACE</h1>
+        <button 
+          onClick={handleLogoClick}
+          className="text-lg font-semibold text-[#437e84] hover:text-[#437e84]/80 transition-colors cursor-pointer"
+        >
+          ACE
+        </button>
         
         <div className="flex items-center gap-2">
           {isEnriching && (

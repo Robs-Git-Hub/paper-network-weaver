@@ -9,6 +9,7 @@ import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from 
 import { FileText, ExternalLink, ChevronUp, ChevronDown } from 'lucide-react';
 import { useKnowledgeGraphStore, Paper } from '@/store/knowledge-graph-store';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { CitationPopup } from '@/components/CitationPopup';
 
 interface CitationsTableProps {
   papers: Paper[];
@@ -69,10 +70,12 @@ const AbstractModal: React.FC<AbstractModalProps> = ({ paper, children }) => {
 };
 
 export const CitationsTable: React.FC<CitationsTableProps> = ({ papers }) => {
-  const { authors, authorships } = useKnowledgeGraphStore();
+  const { authors, authorships, paper_relationships } = useKnowledgeGraphStore();
   const isMobile = useIsMobile();
   const [sortField, setSortField] = useState<SortField>('citations');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [citationPopupOpen, setCitationPopupOpen] = useState(false);
+  const [selectedPaperForCitations, setSelectedPaperForCitations] = useState<Paper | null>(null);
   
   const getAuthorsForPaper = (paperUid: string) => {
     const paperAuthorships = Object.values(authorships).filter(
@@ -83,6 +86,24 @@ export const CitationsTable: React.FC<CitationsTableProps> = ({ papers }) => {
       .sort((a, b) => a.author_position - b.author_position)
       .map(auth => authors[auth.author_short_uid])
       .filter(Boolean);
+  };
+
+  const getCitingPapers = (targetPaperUid: string) => {
+    // Find all papers that cite this paper
+    const citingRelationships = paper_relationships.filter(
+      rel => rel.relationship_type === 'cites' && rel.target_short_uid === targetPaperUid
+    );
+    
+    return citingRelationships
+      .map(rel => papers.find(p => p.short_uid === rel.source_short_uid))
+      .filter(Boolean) as Paper[];
+  };
+
+  const handleCitationClick = (paper: Paper) => {
+    if (paper.cited_by_count > 0) {
+      setSelectedPaperForCitations(paper);
+      setCitationPopupOpen(true);
+    }
   };
 
   const handleSort = (field: SortField) => {
@@ -176,7 +197,19 @@ export const CitationsTable: React.FC<CitationsTableProps> = ({ papers }) => {
                 
                 <div className="flex items-center justify-between text-sm text-muted-foreground">
                   <span>Year: {paper.publication_year || 'N/A'}</span>
-                  <span>Citations: {paper.cited_by_count}</span>
+                  <span>
+                    Citations: 
+                    {paper.cited_by_count > 0 ? (
+                      <button
+                        onClick={() => handleCitationClick(paper)}
+                        className="ml-1 text-[#437e84] hover:underline cursor-pointer"
+                      >
+                        {paper.cited_by_count}
+                      </button>
+                    ) : (
+                      <span className="ml-1">{paper.cited_by_count}</span>
+                    )}
+                  </span>
                 </div>
                 
                 {paper.location && (
@@ -214,6 +247,15 @@ export const CitationsTable: React.FC<CitationsTableProps> = ({ papers }) => {
             </Card>
           );
         })}
+        
+        {selectedPaperForCitations && (
+          <CitationPopup
+            open={citationPopupOpen}
+            onOpenChange={setCitationPopupOpen}
+            citingPapers={getCitingPapers(selectedPaperForCitations.short_uid)}
+            targetPaperTitle={selectedPaperForCitations.title}
+          />
+        )}
       </div>
     );
   }
@@ -260,7 +302,18 @@ export const CitationsTable: React.FC<CitationsTableProps> = ({ papers }) => {
                     </div>
                   </TableCell>
                   <TableCell>{paper.publication_year || 'N/A'}</TableCell>
-                  <TableCell>{paper.cited_by_count}</TableCell>
+                  <TableCell>
+                    {paper.cited_by_count > 0 ? (
+                      <button
+                        onClick={() => handleCitationClick(paper)}
+                        className="text-[#437e84] hover:underline cursor-pointer"
+                      >
+                        {paper.cited_by_count}
+                      </button>
+                    ) : (
+                      paper.cited_by_count
+                    )}
+                  </TableCell>
                   <TableCell className="max-w-xs">
                     <div className="line-clamp-1">{paper.location || 'N/A'}</div>
                   </TableCell>
@@ -292,6 +345,15 @@ export const CitationsTable: React.FC<CitationsTableProps> = ({ papers }) => {
           </TableBody>
         </Table>
       </div>
+      
+      {selectedPaperForCitations && (
+        <CitationPopup
+          open={citationPopupOpen}
+          onOpenChange={setCitationPopupOpen}
+          citingPapers={getCitingPapers(selectedPaperForCitations.short_uid)}
+          targetPaperTitle={selectedPaperForCitations.title}
+        />
+      )}
     </div>
   );
 };
