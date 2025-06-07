@@ -430,7 +430,7 @@ self.onmessage = async function(e) {
         relationships: state.paper_relationships.length
       });
       
-      self.postMessage({ type: 'graph/setState', payload: { data: state } });
+      self.postMessage({ type: 'graph/setState', payload: { data: JSON.stringify(state) } });
       self.postMessage({ 
         type: 'app/setStatus', 
         payload: { state: 'ready', message: 'Initial graph built successfully' } 
