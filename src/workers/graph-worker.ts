@@ -192,11 +192,90 @@ function buildInitialGraph(masterPaper: PaperResult, openAlexCitations: any[], s
       target_short_uid: masterPaperUid,
       relationship_type: 'cites'
     });
+
+    // Process referenced works (Rule 2.4: "Paper A cites Paper B")
+    (citation.referenced_works || []).forEach((targetOpenAlexId: string) => {
+      if (!targetOpenAlexId) return; // Skip null/empty IDs
+      
+      const targetIdWithPrefix = `openalex:${targetOpenAlexId}`;
+      let targetUid = external_id_index[targetIdWithPrefix];
+
+      // If we've never seen this paper before, create a stub for it.
+      if (!targetUid) {
+        targetUid = generateShortUid();
+        external_id_index[targetIdWithPrefix] = targetUid;
+        papers[targetUid] = {
+          short_uid: targetUid,
+          title: 'Unknown Title (Stub)',
+          publication_year: null,
+          publication_date: null,
+          location: null,
+          abstract: null,
+          fwci: null,
+          cited_by_count: 0,
+          type: 'article',
+          language: null,
+          keywords: [],
+          best_oa_url: null,
+          oa_status: null,
+          is_stub: true
+        };
+      }
+      
+      // Create the relationship: "citation" CITES "target"
+      paper_relationships.push({
+        source_short_uid: citationUid,
+        target_short_uid: targetUid,
+        relationship_type: 'cites'
+      });
+    });
+
+    // Process related works (Rule 2.4: "Paper A is similar to Paper B")
+    (citation.related_works || []).forEach((targetOpenAlexId: string) => {
+      if (!targetOpenAlexId) return;
+    
+      const targetIdWithPrefix = `openalex:${targetOpenAlexId}`;
+      let targetUid = external_id_index[targetIdWithPrefix];
+
+      if (!targetUid) {
+        targetUid = generateShortUid();
+        external_id_index[targetIdWithPrefix] = targetUid;
+        papers[targetUid] = {
+          short_uid: targetUid,
+          title: 'Unknown Title (Stub)',
+          publication_year: null,
+          publication_date: null,
+          location: null,
+          abstract: null,
+          fwci: null,
+          cited_by_count: 0,
+          type: 'article',
+          language: null,
+          keywords: [],
+          best_oa_url: null,
+          oa_status: null,
+          is_stub: true
+        };
+      }
+    
+      paper_relationships.push({
+        source_short_uid: citationUid,
+        target_short_uid: targetUid,
+        relationship_type: 'similar'
+      });
+    });
   });
   
   // Process Semantic Scholar data if available
   if (semanticScholarData) {
     console.log('Processing Semantic Scholar data...');
+    
+    // 1. Enrich the Master Paper itself
+    const masterPaperRecord = papers[masterPaperUid];
+    if (masterPaperRecord) {
+      masterPaperRecord.best_oa_url = masterPaperRecord.best_oa_url || semanticScholarData.openAccessPdf?.url || null;
+      // Add other enrichment fields here if needed
+    }
     
     // Process SS citations
     if (semanticScholarData.citations) {
@@ -246,6 +325,22 @@ function buildInitialGraph(masterPaper: PaperResult, openAlexCitations: any[], s
           // Create relationship: SS citation cites master paper
           paper_relationships.push({
             source_short_uid: ssCitationUid,
+            target_short_uid: masterPaperUid,
+            relationship_type: 'cites'
+          });
+        } else {
+          // Enrich existing paper with SS data only if fields are empty
+          const existingPaper = papers[existingUid];
+          if (existingPaper) {
+            existingPaper.abstract = existingPaper.abstract || ssCitation.abstract || null;
+            existingPaper.location = existingPaper.location || ssCitation.venue || null;
+            existingPaper.best_oa_url = existingPaper.best_oa_url || ssCitation.openAccessPdf?.url || null;
+          }
+          
+          // Even if the paper exists, the relationship might not.
+          // Create the "cites" link from the SS paper to the master paper.
+          paper_relationships.push({
+            source_short_uid: existingUid,
             target_short_uid: masterPaperUid,
             relationship_type: 'cites'
           });
@@ -302,6 +397,22 @@ function buildInitialGraph(masterPaper: PaperResult, openAlexCitations: any[], s
           paper_relationships.push({
             source_short_uid: masterPaperUid,
             target_short_uid: ssReferenceUid,
+            relationship_type: 'cites'
+          });
+        } else {
+          // Enrich existing paper with SS data only if fields are empty
+          const existingPaper = papers[existingUid];
+          if (existingPaper) {
+            existingPaper.abstract = existingPaper.abstract || ssReference.abstract || null;
+            existingPaper.location = existingPaper.location || ssReference.venue || null;
+            existingPaper.best_oa_url = existingPaper.best_oa_url || ssReference.openAccessPdf?.url || null;
+          }
+          
+          // Even if the paper exists, the relationship might not.
+          // Create the "cites" link from the master paper to the SS reference.
+          paper_relationships.push({
+            source_short_uid: masterPaperUid,
+            target_short_uid: existingUid,
             relationship_type: 'cites'
           });
         }
