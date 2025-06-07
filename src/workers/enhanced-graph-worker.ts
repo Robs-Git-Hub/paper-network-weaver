@@ -54,6 +54,7 @@ interface PaperRelationship {
   source_short_uid: string;
   target_short_uid: string;
   relationship_type: 'cites' | 'similar';
+  tag?: 'referenced_by_1st_degree';
 }
 
 // Worker state
@@ -230,7 +231,7 @@ async function fetchFirstDegreeCitations(masterPaperOpenAlexId: string) {
   
   const data = await response.json();
   
-  const referencedWorksFreq: Record<string, number> = {};
+  const referencedBy1stDegreeFreq: Record<string, number> = {};
   const relatedWorksFreq: Record<string, number> = {};
   
   for (const paperData of data.results) {
@@ -250,7 +251,7 @@ async function fetchFirstDegreeCitations(masterPaperOpenAlexId: string) {
       for (const refWorkUrl of paperData.referenced_works) {
         const cleanId = normalizeOpenAlexId(refWorkUrl);
         if (cleanId) {
-            referencedWorksFreq[cleanId] = (referencedWorksFreq[cleanId] || 0) + 1;
+            referencedBy1stDegreeFreq[cleanId] = (referencedBy1stDegreeFreq[cleanId] || 0) + 1;
         }
       }
     }
@@ -265,7 +266,7 @@ async function fetchFirstDegreeCitations(masterPaperOpenAlexId: string) {
     }
   }
   
-  const frequentRefs = Object.entries(referencedWorksFreq)
+  const referencedBy1stDegreeIds = Object.entries(referencedBy1stDegreeFreq)
     .filter(([_, count]) => count >= stubCreationThreshold)
     .map(([id, _]) => id);
     
@@ -273,18 +274,18 @@ async function fetchFirstDegreeCitations(masterPaperOpenAlexId: string) {
     .filter(([_, count]) => count >= stubCreationThreshold)
     .map(([id, _]) => id);
   
-  if (frequentRefs.length > 0) {
-    await createStubsFromOpenAlexIds(frequentRefs, 'cites');
+  if (referencedBy1stDegreeIds.length > 0) {
+    await createStubsFromOpenAlexIds(referencedBy1stDegreeIds, 'cites', 'referenced_by_1st_degree');
   }
   
   if (frequentRelated.length > 0) {
     await createStubsFromOpenAlexIds(frequentRelated, 'similar');
   }
   
-  console.log(`[Worker] Phase A, Step 2: Processed ${data.results.length} citations, found ${frequentRefs.length} frequent reference stubs and ${frequentRelated.length} frequent similar stubs.`);
+  console.log(`[Worker] Phase A, Step 2: Processed ${data.results.length} citations, found ${referencedBy1stDegreeIds.length} referenced_by_1st_degree stubs and ${frequentRelated.length} frequent similar stubs.`);
 }
 
-async function createStubsFromOpenAlexIds(openAlexIds: string[], relationshipType: 'cites' | 'similar') {
+async function createStubsFromOpenAlexIds(openAlexIds: string[], relationshipType: 'cites' | 'similar', tag?: 'referenced_by_1st_degree') {
   if (openAlexIds.length === 0) return;
   
   const url = `https://api.openalex.org/works?filter=openalex:${openAlexIds.join('|')}&select=id,title,display_name,publication_year,publication_date,primary_location,cited_by_count,type,authorships`;
@@ -300,19 +301,17 @@ async function createStubsFromOpenAlexIds(openAlexIds: string[], relationshipTyp
   for (const paperData of data.results) {
     const stubUid = await processOpenAlexPaper(paperData, true);
     
-    if (relationshipType === 'cites') {
-      paperRelationships.push({
-        source_short_uid: masterPaperUid!,
-        target_short_uid: stubUid,
-        relationship_type: 'cites'
-      });
-    } else {
-      paperRelationships.push({
-        source_short_uid: masterPaperUid!,
-        target_short_uid: stubUid,
-        relationship_type: 'similar'
-      });
+    const relationship: PaperRelationship = {
+      source_short_uid: relationshipType === 'cites' ? masterPaperUid! : masterPaperUid!,
+      target_short_uid: relationshipType === 'cites' ? stubUid : stubUid,
+      relationship_type: relationshipType
+    };
+
+    if (tag) {
+      relationship.tag = tag;
     }
+
+    paperRelationships.push(relationship);
   }
 }
 
@@ -918,7 +917,7 @@ async function hydrateStubPapers() {
             paper_short_uid: stubUid,
             author_short_uid: authorUid,
             author_position: i,
-            is_corresponding: authorship.is_corresponding || false,
+            is_corresponding: false,
             raw_author_name: authorship.raw_author_name || null,
             institution_uids: []
           };

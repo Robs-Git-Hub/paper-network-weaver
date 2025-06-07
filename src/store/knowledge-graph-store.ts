@@ -1,4 +1,3 @@
-
 import { create } from 'zustand';
 
 // Define the interfaces for the knowledge graph data
@@ -47,6 +46,7 @@ export interface PaperRelationship {
   source_short_uid: string;
   target_short_uid: string;
   relationship_type: 'cites' | 'similar';
+  tag?: 'referenced_by_1st_degree';
 }
 
 export interface ExternalIdType {
