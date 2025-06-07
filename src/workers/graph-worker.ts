@@ -113,6 +113,97 @@ self.onmessage = async (e) => {
   }
 };
 
+function ingestPaper(paperData: any, isStub: boolean): string {
+  // Check if paper already exists by its OpenAlex ID
+  let paperUid = graphData.external_id_index[`openalex:${paperData.id}`];
+
+  if (!paperUid) {
+    // Create the paper if it's new
+    paperUid = generateShortUid('p');
+    addToExternalIdIndex('openalex', paperData.id, paperUid);
+    if (paperData.doi) {
+        // Normalize and add DOI
+        const cleanDoi = paperData.doi.replace('https://doi.org/', '');
+        addToExternalIdIndex('doi', cleanDoi, paperUid);
+    }
+  }
+
+  // Create or update the paper record
+  graphData.papers[paperUid] = {
+    ...graphData.papers[paperUid], // Keep existing data if any
+    short_uid: paperUid,
+    title: paperData.title || paperData.display_name || 'Untitled',
+    publication_year: paperData.publication_year,
+    publication_date: paperData.publication_date || null,
+    location: paperData.primary_location?.source?.display_name || null,
+    // Reconstruct abstract only if we have the inverted index
+    abstract: paperData.abstract_inverted_index ? 'Abstract will be reconstructed here' : graphData.papers[paperUid]?.abstract || null,
+    fwci: paperData.fwci || null,
+    cited_by_count: paperData.cited_by_count || 0,
+    type: paperData.type || 'article',
+    language: paperData.language || null,
+    keywords: paperData.keywords ? paperData.keywords.map(k => k.display_name) : [],
+    best_oa_url: paperData.best_oa_location?.pdf_url || null,
+    oa_status: paperData.open_access?.oa_status || null,
+    is_stub: isStub,
+  };
+
+  // Process authorships ONLY if they exist and the paper is not a stub
+  if (paperData.authorships && !isStub) {
+    for (const authorship of paperData.authorships) {
+        if (!authorship.author) continue; // Skip if author data is missing
+
+        // Ingest Author
+        let authorUid = graphData.external_id_index[`openalex:${authorship.author.id}`];
+        if (!authorUid) {
+            authorUid = generateShortUid('a');
+            graphData.authors[authorUid] = {
+                short_uid: authorUid,
+                clean_name: authorship.author.display_name,
+                orcid: authorship.author.orcid || null,
+                is_stub: false,
+            };
+            addToExternalIdIndex('openalex', authorship.author.id, authorUid);
+        }
+
+        // Ingest Institutions and link them
+        const institutionUids: string[] = [];
+        if(authorship.institutions) {
+            for (const institution of authorship.institutions) {
+                if (!institution.id) continue;
+                let institutionUid = graphData.external_id_index[`openalex:${institution.id}`];
+                if (!institutionUid) {
+                    institutionUid = generateShortUid('i');
+                    graphData.institutions[institutionUid] = {
+                        short_uid: institutionUid,
+                        ror_id: institution.ror || null,
+                        display_name: institution.display_name,
+                        country_code: institution.country_code || null,
+                        type: institution.type || null,
+                    };
+                    addToExternalIdIndex('openalex', institution.id, institutionUid);
+                }
+                institutionUids.push(institutionUid);
+            }
+        }
+
+        // Create Authorship link
+        const authorshipKey = `${paperUid}_${authorUid}`;
+        graphData.authorships[authorshipKey] = {
+            paper_short_uid: paperUid,
+            author_short_uid: authorUid,
+            // Simple position mapping, can be improved
+            author_position: authorship.author_position === 'first' ? 1 : 2,
+            is_corresponding: authorship.is_corresponding,
+            raw_author_name: authorship.raw_author_name,
+            institution_uids: institutionUids,
+        };
+    }
+  }
+  
+  return paperUid;
+}
+
 async function processMasterPaper(selectedPaper: any) {
   try {
     // Phase A: Build initial graph
@@ -170,18 +261,18 @@ async function processMasterPaper(selectedPaper: any) {
 }
 
 async function buildInitialGraph(selectedPaper: any) {
-  // 1. Add the selected paper to the graph
-  const masterPaperUid = await addPaper(selectedPaper, false);
+  // 1. Ingest the selected paper as the Master Paper (not a stub)
+  const masterPaperUid = ingestPaper(selectedPaper, false);
 
   // 2. Fetch citations for the selected paper
   const citationsResponse = await openAlexService.fetchCitations(selectedPaper.id);
   const citations = citationsResponse.results;
 
-  // 3. Add the citations to the graph, creating stubs if necessary
+  // 3. Ingest the citations as full papers (not stubs)
   for (const citation of citations) {
-    const citationUid = await addPaper(citation, true);
+    const citationUid = ingestPaper(citation, false); // Use the new function
 
-    // 4. Create a relationship between the selected paper and the citation
+    // 4. Create a relationship
     graphData.paper_relationships.push({
       source_short_uid: citationUid,
       target_short_uid: masterPaperUid,
@@ -200,104 +291,14 @@ async function enrichMasterPaper(selectedPaper: any) {
       return;
     }
 
-    // 2. Update the paper in the graph with the full details
-    const paperUid = graphData.external_id_index[`openalex:${selectedPaper.id}`];
-    if (!paperUid) {
-      console.warn(`[Worker] Paper not found in graph: ${selectedPaper.id}`);
-      return;
-    }
+    // 2. Use our powerful function to update the master paper with all the rich data.
+    //    It handles all the authors and institutions automatically.
+    ingestPaper(fullPaperDetails, false);
 
     console.log('[Worker] Master paper enriched with detailed data');
-
-    graphData.papers[paperUid] = {
-      ...graphData.papers[paperUid],
-      title: fullPaperDetails.title || graphData.papers[paperUid].title,
-      publication_year: fullPaperDetails.publication_year,
-      publication_date: fullPaperDetails.publication_date,
-      location: fullPaperDetails.primary_location?.source?.display_name || null,
-      abstract: fullPaperDetails.abstract_inverted_index ? 'Abstract available' : null,
-      fwci: fullPaperDetails.fwci || null,
-      cited_by_count: fullPaperDetails.cited_by_count,
-      type: fullPaperDetails.type,
-      language: fullPaperDetails.language || null,
-      keywords: fullPaperDetails.keywords ? fullPaperDetails.keywords.map(k => k.display_name) : [],
-      best_oa_url: fullPaperDetails.best_oa_location?.pdf_url || null,
-      oa_status: fullPaperDetails.open_access?.oa_status || null,
-      is_stub: false // No longer a stub
-    };
-
-    // 3. Process authors and institutions
-    for (const authorship of fullPaperDetails.authorships) {
-      let authorUid = graphData.external_id_index[`openalex:${authorship.author.id}`];
-
-      if (!authorUid) {
-        authorUid = generateShortUid('a');
-        graphData.authors[authorUid] = {
-          short_uid: authorUid,
-          clean_name: authorship.author.display_name,
-          orcid: authorship.author.orcid || null,
-          is_stub: false
-        };
-        addToExternalIdIndex('openalex', authorship.author.id, authorUid);
-      }
-
-      const authorshipUid = generateShortUid('au');
-      graphData.authorships[authorshipUid] = {
-        paper_short_uid: paperUid,
-        author_short_uid: authorUid,
-        author_position: authorship.author_position === 'first' ? 1 : authorship.author_position === 'last' ? 3 : 2,
-        is_corresponding: authorship.is_corresponding,
-        raw_author_name: authorship.raw_author_name,
-        institution_uids: []
-      };
-
-      for (const institution of authorship.institutions) {
-        let institutionUid = graphData.external_id_index[`ror:${institution.ror}`];
-
-        if (!institutionUid) {
-          institutionUid = generateShortUid('i');
-          graphData.institutions[institutionUid] = {
-            short_uid: institutionUid,
-            ror_id: institution.ror || null,
-            display_name: institution.display_name,
-            country_code: institution.country_code || null,
-            type: institution.type || null
-          };
-          addToExternalIdIndex('ror', institution.ror, institutionUid);
-        }
-
-        graphData.authorships[authorshipUid].institution_uids.push(institutionUid);
-      }
-    }
+    
   } catch (error) {
     console.error('[Worker] Error enriching master paper:', error);
     throw error;
   }
-}
-
-async function addPaper(paper: any, isStub: boolean): Promise<string> {
-  let paperUid = graphData.external_id_index[`openalex:${paper.id}`];
-
-  if (!paperUid) {
-    paperUid = generateShortUid('p');
-    graphData.papers[paperUid] = {
-      short_uid: paperUid,
-      title: paper.title || paper.display_name || 'Untitled',
-      publication_year: paper.publication_year,
-      publication_date: paper.publication_date || null,
-      location: paper.primary_location?.source?.display_name || null,
-      abstract: null,
-      fwci: paper.fwci || null,
-      cited_by_count: paper.cited_by_count || 0,
-      type: paper.type || 'article',
-      language: paper.language || null,
-      keywords: paper.keywords ? paper.keywords.map(k => k.display_name) : [],
-      best_oa_url: paper.best_oa_location?.pdf_url || null,
-      oa_status: paper.open_access?.oa_status || null,
-      is_stub: isStub
-    };
-    addToExternalIdIndex('openalex', paper.id, paperUid);
-  }
-
-  return paperUid;
 }
