@@ -10,14 +10,11 @@ class WorkerManager {
   private worker: Worker | null = null;
   private store = useKnowledgeGraphStore;
 
-  // The new, robust version
   initialize() {
-    // If a worker already exists, do nothing. It's already initialized.
     if (this.worker) {
-      return;
+      this.worker.terminate();
     }
   
-    // This code will now only run ONCE, on the very first call.
     this.worker = new Worker(
       new URL('../workers/enhanced-graph-worker.ts', import.meta.url),
       { type: 'module' }
@@ -26,7 +23,7 @@ class WorkerManager {
     this.worker.addEventListener('message', this.handleWorkerMessage.bind(this));
     this.worker.addEventListener('error', this.handleWorkerError.bind(this));
   }
-  
+
   private handleWorkerMessage(event: MessageEvent<WorkerMessage>) {
     const { type, payload } = event.data;
     console.log('[WorkerManager] Received message:', type, payload);
