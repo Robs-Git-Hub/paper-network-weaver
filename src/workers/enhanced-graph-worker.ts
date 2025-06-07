@@ -541,7 +541,7 @@ async function performAuthorReconciliation() {
   
   if (stubAuthors.length === 0) {
     console.log('[Worker] Phase B, Steps 5 & 6: No stub authors to reconcile. Finishing enrichment.');
-    postMessage('app_status/update', { state: 'idle', message: null });
+    postMessage('app_status/update', { state: 'active', message: null });
     return;
   }
   
