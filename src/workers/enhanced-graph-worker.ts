@@ -576,7 +576,7 @@ async function performAuthorReconciliation() {
   
   if (reconciliationMap.size === 0) {
     console.log('[Worker] Phase B, Steps 5 & 6: No DOIs found for stub authors. Finishing enrichment.');
-    postMessage('app_status/update', { state: 'idle', message: null });
+    postMessage('app_status/update', { state: 'active', message: null });
     return;
   }
   
