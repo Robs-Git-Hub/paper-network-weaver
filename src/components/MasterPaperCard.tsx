@@ -39,7 +39,6 @@ export const MasterPaperCard: React.FC<MasterPaperCardProps> = ({ paper }) => {
           {paper.publication_year && (
             <span>Year: {paper.publication_year}</span>
           )}
-          <span>Citations: {paper.cited_by_count}</span>
           {paper.location && (
             <span>Published in: {paper.location}</span>
           )}

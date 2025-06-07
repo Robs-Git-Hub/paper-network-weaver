@@ -1,8 +1,10 @@
 
 import React from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useKnowledgeGraphStore, Paper } from '@/store/knowledge-graph-store';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface CitationsTableProps {
   papers: Paper[];
@@ -10,6 +12,7 @@ interface CitationsTableProps {
 
 export const CitationsTable: React.FC<CitationsTableProps> = ({ papers }) => {
   const { authors, authorships } = useKnowledgeGraphStore();
+  const isMobile = useIsMobile();
   
   const getAuthorsForPaper = (paperUid: string) => {
     const paperAuthorships = Object.values(authorships).filter(
@@ -22,6 +25,53 @@ export const CitationsTable: React.FC<CitationsTableProps> = ({ papers }) => {
       .filter(Boolean);
   };
 
+  // Mobile card layout
+  if (isMobile) {
+    return (
+      <div className="space-y-4">
+        {papers.map((paper) => {
+          const paperAuthors = getAuthorsForPaper(paper.short_uid);
+          return (
+            <Card key={paper.short_uid}>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base font-medium leading-tight">
+                  {paper.title}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex flex-wrap gap-1">
+                  {paperAuthors.slice(0, 3).map(author => (
+                    <Badge key={author.short_uid} variant="outline" className="text-xs">
+                      {author.clean_name}
+                    </Badge>
+                  ))}
+                  {paperAuthors.length > 3 && (
+                    <span className="text-xs text-muted-foreground">
+                      +{paperAuthors.length - 3} more
+                    </span>
+                  )}
+                </div>
+                
+                <div className="flex items-center justify-between text-sm text-muted-foreground">
+                  <span>Year: {paper.publication_year || 'N/A'}</span>
+                  <span>Citations: {paper.cited_by_count}</span>
+                </div>
+                
+                {paper.location && (
+                  <div className="text-sm text-muted-foreground">
+                    <span className="font-medium">Journal: </span>
+                    {paper.location}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // Desktop table layout
   return (
     <div className="rounded-md border">
       <Table>
