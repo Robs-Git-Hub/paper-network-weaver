@@ -698,15 +698,257 @@ async function performAuthorReconciliation() {
   postMessage('app_status/update', { state: 'active', message: null });
 }
 
+async function fetchSecondDegreeCitations() {
+  console.log('[Worker] Phase C, Step 8: Fetching 2nd degree citations.');
+  postMessage('progress/update', { message: 'Fetching 2nd degree citations...' });
+
+  // Get all 1st-degree citation papers (papers that cite the master paper)
+  const firstDegreeCitations = paperRelationships.filter(
+    rel => rel.relationship_type === 'cites' && rel.target_short_uid === masterPaperUid
+  );
+
+  if (firstDegreeCitations.length === 0) {
+    console.log('[Worker] No 1st degree citations found, skipping 2nd degree fetch.');
+    return;
+  }
+
+  // Collect OpenAlex IDs for these papers
+  const openAlexIds: string[] = [];
+  for (const rel of firstDegreeCitations) {
+    const openAlexKey = Object.keys(externalIdIndex).find(key => 
+      key.startsWith('openalex:') && externalIdIndex[key] === rel.source_short_uid
+    );
+    if (openAlexKey) {
+      const openAlexId = openAlexKey.split('openalex:')[1];
+      openAlexIds.push(openAlexId);
+    }
+  }
+
+  if (openAlexIds.length === 0) {
+    console.log('[Worker] No OpenAlex IDs found for 1st degree citations.');
+    return;
+  }
+
+  try {
+    // Make batch API call to find papers that cite any of these 1st degree papers
+    const url = `https://api.openalex.org/works?filter=cites:${openAlexIds.join('|')}&per-page=200&select=id,title,display_name,publication_year,publication_date,primary_location,abstract_inverted_index,fwci,cited_by_count,type,language,keywords,open_access,authorships`;
+    
+    const response = await fetchWithRetry(url);
+    if (!response.ok) {
+      console.warn(`[Worker] Failed to fetch 2nd degree citations: ${response.status}`);
+      return;
+    }
+    
+    const data = await response.json();
+    console.log(`[Worker] Found ${data.results.length} 2nd degree citations.`);
+    
+    const newPapers: Record<string, Paper> = {};
+    const newAuthors: Record<string, Author> = {};
+    const newInstitutions: Record<string, Institution> = {};
+    const newAuthorships: Record<string, Authorship> = {};
+    const newRelationships: PaperRelationship[] = [];
+    
+    for (const paperData of data.results) {
+      // Normalize OpenAlex ID
+      if (paperData.id) {
+        paperData.id = paperData.id.replace('https://openalex.org/', '');
+      }
+
+      // Check if paper already exists
+      const existingUid = findByExternalId('openalex', paperData.id);
+      if (existingUid) continue; // Skip if already in graph
+      
+      const paperUid = await processOpenAlexPaper(paperData, false);
+      
+      // Add to new data collections
+      newPapers[paperUid] = papers[paperUid];
+      
+      // Find which 1st degree paper this cites
+      if (paperData.referenced_works) {
+        for (const refWorkUrl of paperData.referenced_works) {
+          const cleanId = refWorkUrl.replace('https://openalex.org/', '');
+          if (openAlexIds.includes(cleanId)) {
+            const targetUid = findByExternalId('openalex', cleanId);
+            if (targetUid) {
+              newRelationships.push({
+                source_short_uid: paperUid,
+                target_short_uid: targetUid,
+                relationship_type: 'cites'
+              });
+            }
+          }
+        }
+      }
+      
+      // Collect new authors and authorships
+      Object.entries(authorships).forEach(([key, authorship]) => {
+        if (authorship.paper_short_uid === paperUid) {
+          newAuthorships[key] = authorship;
+          if (authors[authorship.author_short_uid]) {
+            newAuthors[authorship.author_short_uid] = authors[authorship.author_short_uid];
+          }
+        }
+      });
+      
+      // Collect new institutions
+      Object.values(newAuthorships).forEach(authorship => {
+        authorship.institution_uids.forEach(instUid => {
+          if (institutions[instUid]) {
+            newInstitutions[instUid] = institutions[instUid];
+          }
+        });
+      });
+    }
+    
+    // Add new relationships to global state
+    paperRelationships.push(...newRelationships);
+    
+    // Post new data to main thread
+    if (Object.keys(newPapers).length > 0) {
+      postMessage('graph/addNodes', {
+        data: {
+          papers: newPapers,
+          authors: newAuthors,
+          institutions: newInstitutions,
+          authorships: newAuthorships,
+          paper_relationships: newRelationships
+        }
+      });
+    }
+    
+    console.log(`[Worker] Added ${Object.keys(newPapers).length} new 2nd degree citation papers.`);
+    
+  } catch (error) {
+    console.warn('[Worker] Error fetching 2nd degree citations:', error);
+  }
+}
+
+async function hydrateStubPapers() {
+  console.log('[Worker] Phase C, Step 9: Hydrating stub papers.');
+  postMessage('progress/update', { message: 'Hydrating stub papers...' });
+
+  // Find all stub papers
+  const stubPapers = Object.values(papers).filter(paper => paper.is_stub);
+  
+  if (stubPapers.length === 0) {
+    console.log('[Worker] No stub papers to hydrate.');
+    return;
+  }
+
+  // Collect OpenAlex IDs for stub papers
+  const openAlexIds: string[] = [];
+  const stubUidToOpenAlexId: Record<string, string> = {};
+  
+  for (const stubPaper of stubPapers) {
+    const openAlexKey = Object.keys(externalIdIndex).find(key => 
+      key.startsWith('openalex:') && externalIdIndex[key] === stubPaper.short_uid
+    );
+    if (openAlexKey) {
+      const openAlexId = openAlexKey.split('openalex:')[1];
+      openAlexIds.push(openAlexId);
+      stubUidToOpenAlexId[stubPaper.short_uid] = openAlexId;
+    }
+  }
+
+  if (openAlexIds.length === 0) {
+    console.log('[Worker] No OpenAlex IDs found for stub papers.');
+    return;
+  }
+
+  try {
+    // Make batch API call to get full data for stub papers
+    const url = `https://api.openalex.org/works?filter=openalex:${openAlexIds.join('|')}&select=id,title,display_name,publication_year,publication_date,primary_location,abstract_inverted_index,fwci,cited_by_count,type,language,keywords,open_access,authorships`;
+    
+    const response = await fetchWithRetry(url);
+    if (!response.ok) {
+      console.warn(`[Worker] Failed to hydrate stub papers: ${response.status}`);
+      return;
+    }
+    
+    const data = await response.json();
+    console.log(`[Worker] Hydrating ${data.results.length} stub papers.`);
+    
+    for (const paperData of data.results) {
+      // Normalize OpenAlex ID
+      const normalizedId = paperData.id.replace('https://openalex.org/', '');
+      
+      // Find the corresponding stub paper
+      const stubUid = Object.keys(stubUidToOpenAlexId).find(
+        uid => stubUidToOpenAlexId[uid] === normalizedId
+      );
+      
+      if (!stubUid || !papers[stubUid]) continue;
+      
+      // Update the stub paper with full data
+      const updatedPaper: Paper = {
+        ...papers[stubUid],
+        title: paperData.title || paperData.display_name || papers[stubUid].title,
+        publication_year: paperData.publication_year || papers[stubUid].publication_year,
+        publication_date: paperData.publication_date || papers[stubUid].publication_date,
+        location: paperData.primary_location?.source?.display_name || papers[stubUid].location,
+        abstract: reconstructAbstract(paperData.abstract_inverted_index) || papers[stubUid].abstract,
+        fwci: paperData.fwci || papers[stubUid].fwci,
+        cited_by_count: paperData.cited_by_count || papers[stubUid].cited_by_count,
+        type: paperData.type || papers[stubUid].type,
+        language: paperData.language || papers[stubUid].language,
+        keywords: extractKeywords(paperData.keywords) || papers[stubUid].keywords,
+        best_oa_url: paperData.open_access?.oa_url || papers[stubUid].best_oa_url,
+        oa_status: paperData.open_access?.oa_status || papers[stubUid].oa_status,
+        is_stub: false // No longer a stub
+      };
+      
+      // Update in worker state
+      papers[stubUid] = updatedPaper;
+      
+      // Post update to main thread
+      postMessage('papers/updateOne', {
+        id: stubUid,
+        changes: updatedPaper
+      });
+      
+      // Process new authorships if available
+      if (paperData.authorships) {
+        for (let i = 0; i < paperData.authorships.length; i++) {
+          const authorship = paperData.authorships[i];
+          const authorUid = await processOpenAlexAuthor(authorship.author, false);
+          
+          // Create authorship record
+          const authorshipKey = `${stubUid}_${authorUid}`;
+          const newAuthorship: Authorship = {
+            paper_short_uid: stubUid,
+            author_short_uid: authorUid,
+            author_position: i,
+            is_corresponding: authorship.is_corresponding || false,
+            raw_author_name: authorship.raw_author_name || null,
+            institution_uids: []
+          };
+          
+          // Process institutions
+          if (authorship.institutions) {
+            for (const inst of authorship.institutions) {
+              const instUid = await processOpenAlexInstitution(inst);
+              newAuthorship.institution_uids.push(instUid);
+            }
+          }
+          
+          authorships[authorshipKey] = newAuthorship;
+        }
+      }
+    }
+    
+    console.log(`[Worker] Successfully hydrated ${data.results.length} stub papers.`);
+    
+  } catch (error) {
+    console.warn('[Worker] Error hydrating stub papers:', error);
+  }
+}
+
 self.addEventListener('message', (event: MessageEvent<WorkerMessage>) => {
   const { type, payload } = event.data;
 
-  // The listener itself is now synchronous.
-  // We handle each message type and kick off async work if needed.
   switch (type) {
     case 'graph/processMasterPaper':
-      // We launch the long-running task in a self-invoking async function.
-      // This lets the event listener finish immediately.
+      // ... keep existing code (the existing async function implementation)
       (async () => {
         try {
           console.log("--- [Worker] Received 'graph/processMasterPaper'. Starting Phase A. ---");
@@ -751,14 +993,36 @@ self.addEventListener('message', (event: MessageEvent<WorkerMessage>) => {
           console.log('--- [Worker] Phase B Complete. All enrichment finished. ---');
 
         } catch (error) {
-          // The try/catch block is now inside the async function to correctly handle errors.
           console.error('[Worker] A fatal error occurred during graph build:', error);
           postMessage('error/fatal', { 
             message: `Worker error: ${error instanceof Error ? error.message : 'Unknown error'}` 
           });
         }
-      })(); // The '()' here immediately invokes the function
+      })();
+      break;
+
+    case 'graph/extend':
+      console.log('--- [Worker] Received "graph/extend". Starting Phase C. ---');
       
+      (async () => {
+        try {
+          postMessage('app_status/update', { state: 'extending', message: 'Extending network...' });
+          
+          // Fetch 2nd degree citations (Work Plan Step 8)
+          await fetchSecondDegreeCitations();
+
+          // Hydrate existing stubs (Work Plan Step 9)
+          await hydrateStubPapers();
+
+          console.log('--- [Worker] Phase C Complete. Graph extension finished. ---');
+          postMessage('app_status/update', { state: 'active', message: null });
+        } catch (error) {
+          console.error('[Worker] Error during graph extension:', error);
+          postMessage('error/fatal', { 
+            message: `Extension error: ${error instanceof Error ? error.message : 'Unknown error'}` 
+          });
+        }
+      })();
       break;
       
     default:

@@ -100,6 +100,17 @@ class WorkerManager {
     });
   }
 
+  extendGraph() {
+    if (!this.worker) {
+      throw new Error('Worker not initialized');
+    }
+
+    this.worker.postMessage({
+      type: 'graph/extend',
+      payload: null // No payload needed for the simplified action
+    });
+  }
+
   terminate() {
     if (this.worker) {
       this.worker.terminate();
