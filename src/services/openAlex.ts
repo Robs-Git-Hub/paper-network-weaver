@@ -76,9 +76,8 @@ export class OpenAlexService {
   
   async searchPapers(query: string): Promise<OpenAlexSearchResponse> {
     const encodedQuery = encodeURIComponent(query);
-    // Reverted back to the original general search parameter instead of title.search filter
-    const url = `${this.baseUrl}/works?search=${encodedQuery}&select=id,doi,display_name,publication_year,authorships,primary_location,cited_by_count&per_page=25`;
-    
+    // Do not change this search method (url = `${this.baseUrl}/works?filter=title.search:${encodedQuery}&select=)
+    const url = `${this.baseUrl}/works?filter=title.search:${encodedQuery}&select=id,doi,display_name,publication_year,authorships,primary_location&per_page=25`;    
     const response = await fetchWithRetry(url);
     if (response.status === 404) {
       return { results: [], meta: { count: 0, db_response_time_ms: 0, page: 1, per_page: 25 } };
