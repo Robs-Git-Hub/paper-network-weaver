@@ -10,19 +10,25 @@ interface KeywordObject {
 }
 
 export function reconstructAbstract(
-  invertedIndex: Record<string, number[]> | null
+  invertedIndex: Record<string, number[]> | null | undefined
 ): string | null {
   if (!invertedIndex || typeof invertedIndex !== 'object') {
     return null;
   }
   const words: string[] = [];
-  for (const word in invertedIndex) {
-    const positions = invertedIndex[word];
-    for (const pos of positions) {
-      words[pos] = word;
+  // Using a try-catch block for safety against malformed data
+  try {
+    for (const word in invertedIndex) {
+      const positions = invertedIndex[word];
+      for (const pos of positions) {
+        words[pos] = word;
+      }
     }
+    return words.join(' ');
+  } catch (e) {
+    console.error("Failed to reconstruct abstract", e);
+    return null; // Return null if something goes wrong
   }
-  return words.join(' ');
 }
 
 export function extractKeywords(
