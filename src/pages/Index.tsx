@@ -88,6 +88,8 @@ const Index = () => {
         cited_by_count: paper.cited_by_count || 0
       }));
       
+      console.log('Transformed results:', transformedResults);
+      
       setSearchResults(transformedResults);
       setTotalCount(response.meta.count);
       
@@ -142,7 +144,7 @@ const Index = () => {
           <div className="min-h-[60vh] flex flex-col items-center justify-center text-center space-y-8">
             <div className="space-y-4">
               <h1 className="text-4xl font-bold text-foreground">
-                Academic Knowledge Graph Explorer
+                Academic Citation Explorer
               </h1>
               <p className="text-xl text-muted-foreground max-w-2xl">
                 Explore citation networks between research papers

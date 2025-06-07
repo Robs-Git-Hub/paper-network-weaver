@@ -60,8 +60,8 @@ export class OpenAlexService {
   
   async searchPapers(query: string): Promise<OpenAlexSearchResponse> {
     const encodedQuery = encodeURIComponent(query);
-    // Updated to use correct OpenAlex field names based on the tested API calls
-    const url = `${this.baseUrl}/works?filter=title.search:${encodedQuery}&select=id,doi,display_name,publication_year,authorships&per_page=25`;
+    // Added primary_location to get the journal/venue information
+    const url = `${this.baseUrl}/works?filter=title.search:${encodedQuery}&select=id,doi,display_name,publication_year,authorships,primary_location&per_page=25`;
     
     console.log('OpenAlex search URL:', url);
     
@@ -72,6 +72,42 @@ export class OpenAlexService {
     
     const data = await response.json();
     console.log('OpenAlex search response:', data);
+    
+    return data;
+  }
+
+  async fetchCitations(openAlexId: string): Promise<OpenAlexSearchResponse> {
+    // Extract just the ID part from the full OpenAlex URL
+    const workId = openAlexId.replace('https://openalex.org/', '');
+    const url = `${this.baseUrl}/works?filter=cites:${workId}&per_page=200&select=id,ids,doi,title,publication_year,publication_date,type,authorships,fwci,cited_by_count,abstract_inverted_index,primary_location`;
+    
+    console.log('OpenAlex citations URL:', url);
+    
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`OpenAlex citations API error: ${response.status} ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    console.log('OpenAlex citations response:', data);
+    
+    return data;
+  }
+
+  async fetchPaperDetails(openAlexId: string): Promise<any> {
+    // Extract just the ID part from the full OpenAlex URL  
+    const workId = openAlexId.replace('https://openalex.org/', '');
+    const url = `${this.baseUrl}/works/${workId}?select=id,ids,doi,title,publication_year,publication_date,type,language,authorships,primary_location,fwci,cited_by_count,abstract_inverted_index,best_oa_location,open_access,keywords,referenced_works,related_works`;
+    
+    console.log('OpenAlex paper details URL:', url);
+    
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`OpenAlex paper details API error: ${response.status} ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    console.log('OpenAlex paper details response:', data);
     
     return data;
   }
