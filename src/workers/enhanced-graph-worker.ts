@@ -695,7 +695,7 @@ async function performAuthorReconciliation() {
     console.log('[Worker] Phase B, Steps 5 & 6: No high-confidence author matches found.');
   }
   
-  postMessage('app_status/update', { state: 'idle', message: null });
+  postMessage('app_status/update', { state: 'active', message: null });
 }
 
 self.addEventListener('message', (event: MessageEvent<WorkerMessage>) => {
