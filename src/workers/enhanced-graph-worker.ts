@@ -1,6 +1,8 @@
 import { semanticScholarService } from '../services/semanticScholar';
 import { fetchWithRetry } from '../utils/api-helpers';
 import { reconstructAbstract, extractKeywords, normalizeDoi, calculateMatchScore, generateShortUid } from '../utils/data-transformers';
+import { processOpenAlexPaper, processOpenAlexAuthor, processOpenAlexInstitution } from './graph-core/entity-processors';
+import type { WorkerMessage, Paper, Author, Institution, Authorship, PaperRelationship } from './graph-core/types';
 
 // Worker message types
 interface WorkerMessage {
@@ -84,131 +86,41 @@ function findByExternalId(idType: string, idValue: string): string | null {
 }
 
 // Phase A Implementation
-async function processOpenAlexPaper(paperData: any, isStub = false): Promise<string> {
-  // Check if paper already exists
-  if (paperData.doi) {
-    const normalizedDoi = normalizeDoi(paperData.doi);
-    if (normalizedDoi) {
-      const existingUid = findByExternalId('doi', normalizedDoi);
-      if (existingUid) return existingUid;
-    }
-  }
-
-  if (paperData.id) {
-    const existingUid = findByExternalId('openalex', paperData.id);
-    if (existingUid) return existingUid;
-  }
-
-  // Create new paper
-  const paperUid = generateShortUid();
-  
-  const paper: Paper = {
-    short_uid: paperUid,
-    title: paperData.title || paperData.display_name || 'Untitled',
-    publication_year: paperData.publication_year || null,
-    publication_date: paperData.publication_date || null,
-    location: paperData.primary_location?.source?.display_name || null,
-    abstract: reconstructAbstract(paperData.abstract_inverted_index),
-    fwci: paperData.fwci || null,
-    cited_by_count: paperData.cited_by_count || 0,
-    type: paperData.type || 'article',
-    language: paperData.language || null,
-    keywords: extractKeywords(paperData.keywords),
-    best_oa_url: paperData.open_access?.oa_url || null,
-    oa_status: paperData.open_access?.oa_status || null,
-    is_stub: isStub
-  };
-
-  papers[paperUid] = paper;
-
-  // Add to external index
-  if (paperData.id) {
-    addToExternalIndex('openalex', paperData.id, paperUid);
-  }
-  if (paperData.doi) {
-    const normalizedDoi = normalizeDoi(paperData.doi);
-    if (normalizedDoi) {
-      addToExternalIndex('doi', normalizedDoi, paperUid);
-    }
-  }
-
-  // Process authors
-  if (paperData.authorships) {
-    for (let i = 0; i < paperData.authorships.length; i++) {
-      const authorship = paperData.authorships[i];
-      const authorUid = await processOpenAlexAuthor(authorship.author, isStub);
-      
-      // Create authorship record
-      const authorshipKey = `${paperUid}_${authorUid}`;
-      authorships[authorshipKey] = {
-        paper_short_uid: paperUid,
-        author_short_uid: authorUid,
-        author_position: i,
-        is_corresponding: authorship.is_corresponding || false,
-        raw_author_name: authorship.raw_author_name || null,
-        institution_uids: []
-      };
-
-      // Process institutions
-      if (authorship.institutions) {
-        for (const inst of authorship.institutions) {
-          const instUid = await processOpenAlexInstitution(inst);
-          authorships[authorshipKey].institution_uids.push(instUid);
-        }
-      }
-    }
-  }
-
-  return paperUid;
+async function processOpenAlexPaperWrapper(paperData: any, isStub = false): Promise<string> {
+  return processOpenAlexPaper(
+    paperData, 
+    isStub, 
+    papers, 
+    authors, 
+    institutions, 
+    authorships, 
+    externalIdIndex, 
+    addToExternalIndex, 
+    findByExternalId
+  );
 }
 
-async function processOpenAlexAuthor(authorData: any, isStub = false): Promise<string> {
-  if (authorData.id) {
-    const existingUid = findByExternalId('openalex_author', authorData.id);
-    if (existingUid) return existingUid;
-  }
-
-  const authorUid = generateShortUid();
-  
-  const author: Author = {
-    short_uid: authorUid,
-    clean_name: authorData.display_name || 'Unknown Author',
-    orcid: authorData.orcid || null,
-    is_stub: isStub
-  };
-
-  authors[authorUid] = author;
-
-  if (authorData.id) {
-    addToExternalIndex('openalex_author', authorData.id, authorUid);
-  }
-
-  return authorUid;
+async function processOpenAlexAuthorWrapper(authorData: any, isStub = false): Promise<string> {
+  return processOpenAlexAuthor(
+    authorData, 
+    isStub, 
+    authors, 
+    institutions, 
+    authorships, 
+    externalIdIndex, 
+    addToExternalIndex, 
+    findByExternalId
+  );
 }
 
-async function processOpenAlexInstitution(instData: any): Promise<string> {
-  if (instData.id) {
-    const existingUid = findByExternalId('openalex_institution', instData.id);
-    if (existingUid) return existingUid;
-  }
-
-  const instUid = generateShortUid();
-  
-  const institution: Institution = {
-    short_uid: instUid,
-    ror_id: instData.ror || null,
-    display_name: instData.display_name || 'Unknown Institution',
-    country_code: instData.country_code || null,
-    type: instData.type || null
-  };
-
-  institutions[instUid] = institution;
-
-  if (instData.id) {
-    addToExternalIndex('openalex_institution', instData.id, instUid);
-  }
-
-  return instUid;
+async function processOpenAlexInstitutionWrapper(instData: any): Promise<string> {
+  return processOpenAlexInstitution(
+    instData, 
+    institutions, 
+    externalIdIndex, 
+    addToExternalIndex, 
+    findByExternalId
+  );
 }
 
 async function fetchFirstDegreeCitations(masterPaperOpenAlexId: string) {
@@ -239,7 +151,7 @@ async function fetchFirstDegreeCitations(masterPaperOpenAlexId: string) {
         paperData.id = normalizeOpenAlexId(paperData.id);
     }
 
-    const paperUid = await processOpenAlexPaper(paperData, false);
+    const paperUid = await processOpenAlexPaperWrapper(paperData, false);
     
     paperRelationships.push({
       source_short_uid: paperUid,
@@ -299,7 +211,7 @@ async function createStubsFromOpenAlexIds(openAlexIds: string[], relationshipTyp
   const data = await response.json();
   
   for (const paperData of data.results) {
-    const stubUid = await processOpenAlexPaper(paperData, true);
+    const stubUid = await processOpenAlexPaperWrapper(paperData, true);
     
     const relationship: PaperRelationship = {
       source_short_uid: relationshipType === 'cites' ? masterPaperUid! : masterPaperUid!,
@@ -757,7 +669,7 @@ async function fetchSecondDegreeCitations() {
       const existingUid = findByExternalId('openalex', paperData.id);
       if (existingUid) continue; // Skip if already in graph
       
-      const paperUid = await processOpenAlexPaper(paperData, false);
+      const paperUid = await processOpenAlexPaperWrapper(paperData, false);
       
       // Add to new data collections
       newPapers[paperUid] = papers[paperUid];
@@ -909,7 +821,7 @@ async function hydrateStubPapers() {
       if (paperData.authorships) {
         for (let i = 0; i < paperData.authorships.length; i++) {
           const authorship = paperData.authorships[i];
-          const authorUid = await processOpenAlexAuthor(authorship.author, false);
+          const authorUid = await processOpenAlexAuthorWrapper(authorship.author, false);
           
           // Create authorship record
           const authorshipKey = `${stubUid}_${authorUid}`;
@@ -925,7 +837,7 @@ async function hydrateStubPapers() {
           // Process institutions
           if (authorship.institutions) {
             for (const inst of authorship.institutions) {
-              const instUid = await processOpenAlexInstitution(inst);
+              const instUid = await processOpenAlexInstitutionWrapper(inst);
               newAuthorship.institution_uids.push(instUid);
             }
           }
@@ -947,7 +859,6 @@ self.addEventListener('message', (event: MessageEvent<WorkerMessage>) => {
 
   switch (type) {
     case 'graph/processMasterPaper':
-      // ... keep existing code (the existing async function implementation)
       (async () => {
         try {
           console.log("--- [Worker] Received 'graph/processMasterPaper'. Starting Phase A. ---");
@@ -963,7 +874,7 @@ self.addEventListener('message', (event: MessageEvent<WorkerMessage>) => {
           postMessage('app_status/update', { state: 'loading', message: 'Processing master paper...' });
           
           console.log('[Worker] Phase A, Step 1: Processing Master Paper.');
-          masterPaperUid = await processOpenAlexPaper(payload.paper, false);
+          masterPaperUid = await processOpenAlexPaperWrapper(payload.paper, false);
           console.log('[Worker] Phase A, Step 1: Master Paper processed.');
           
           if (payload.paper.id) {
