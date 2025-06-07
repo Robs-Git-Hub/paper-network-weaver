@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useKnowledgeGraphStore } from '@/store/knowledge-graph-store';
 import { SearchBar } from '@/components/SearchBar';
 import { PaperSelector } from '@/components/PaperSelector';
@@ -27,9 +27,49 @@ const Index = () => {
   const [searchResults, setSearchResults] = useState<PaperResult[]>([]);
   const [totalCount, setTotalCount] = useState<number>(0);
   const [isSearching, setIsSearching] = useState(false);
+  const [worker, setWorker] = useState<Worker | null>(null);
   
-  const { app_status, setAppStatus } = useKnowledgeGraphStore();
+  const { app_status, setAppStatus, setState } = useKnowledgeGraphStore();
   const { toast } = useToast();
+
+  // Initialize web worker
+  useEffect(() => {
+    const newWorker = new Worker(new URL('../workers/graph-worker.ts', import.meta.url), {
+      type: 'module'
+    });
+
+    newWorker.onmessage = (e) => {
+      const { type, payload } = e.data;
+      
+      switch (type) {
+        case 'progress/update':
+          setAppStatus({ state: app_status.state, message: payload.message });
+          break;
+        case 'graph/setState':
+          setState(payload.data);
+          break;
+        case 'app/setStatus':
+          setAppStatus(payload);
+          break;
+        case 'error/fatal':
+          setAppStatus({ state: 'error', message: payload.message });
+          toast({
+            title: "Error",
+            description: payload.message,
+            variant: "destructive"
+          });
+          break;
+        default:
+          console.warn('Unknown worker message type:', type);
+      }
+    };
+
+    setWorker(newWorker);
+
+    return () => {
+      newWorker.terminate();
+    };
+  }, []);
 
   const handleSearch = async (query: string) => {
     setIsSearching(true);
@@ -75,8 +115,14 @@ const Index = () => {
     // Clear search results to show the main analysis view
     setSearchResults([]);
     
-    // TODO: Send selected paper to web worker for Phase A processing
-    // For now, just show loading state
+    // Send selected paper to web worker for processing
+    if (worker) {
+      worker.postMessage({
+        type: 'graph/processMasterPaper',
+        payload: { paper }
+      });
+    }
+    
     toast({
       title: "Paper selected",
       description: `Processing "${paper.title || paper.display_name}"...`
@@ -99,15 +145,11 @@ const Index = () => {
                 Academic Knowledge Graph Explorer
               </h1>
               <p className="text-xl text-muted-foreground max-w-2xl">
-                Discover citation networks and explore the connections between research papers
+                Explore citation networks between research papers
               </p>
             </div>
             
             <SearchBar onSearch={handleSearch} isLoading={isSearching} />
-            
-            <p className="text-sm text-muted-foreground max-w-lg">
-              Enter the full title of a research paper to build a citation graph and explore its academic network
-            </p>
           </div>
         )}
 

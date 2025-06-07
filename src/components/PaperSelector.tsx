@@ -64,16 +64,13 @@ export const PaperSelector: React.FC<PaperSelectorProps> = ({
                   )}
                 </div>
                 
-                <div className="flex items-center gap-2 flex-wrap">
-                  {paper.primary_location?.source?.display_name && (
+                {paper.primary_location?.source?.display_name && (
+                  <div className="flex items-center gap-2">
                     <Badge variant="outline" className="text-xs">
                       {paper.primary_location.source.display_name}
                     </Badge>
-                  )}
-                  <Badge variant="secondary" className="text-xs">
-                    {paper.cited_by_count} citations
-                  </Badge>
-                </div>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

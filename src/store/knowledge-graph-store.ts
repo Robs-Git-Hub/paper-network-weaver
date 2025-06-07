@@ -1,10 +1,6 @@
-
 import { create } from 'zustand';
 
-// Types from the schema
-export type ExternalIdType = 'openalex' | 'doi' | 'mag' | 'ss' | 'ror' | 'CorpusId' | 'DBLP' | 'ACL';
-export type RelationshipType = 'cites' | 'similar';
-
+// Define the interfaces for the knowledge graph data
 export interface Paper {
   short_uid: string;
   title: string;
@@ -49,44 +45,49 @@ export interface Authorship {
 export interface PaperRelationship {
   source_short_uid: string;
   target_short_uid: string;
-  relationship_type: RelationshipType;
+  relationship_type: 'cites' | 'similar';
+}
+
+export interface ExternalIdType {
+  id_type: 'openalex' | 'doi' | 'ss' | 'corpusId';
+  id_value: string;
 }
 
 export interface AppStatus {
-  state: 'idle' | 'loading' | 'enriching' | 'extending' | 'error';
+  state: 'idle' | 'loading' | 'enriching' | 'error';
   message: string | null;
 }
 
-export interface KnowledgeGraphStore {
+interface KnowledgeGraphStore {
+  // === ENTITY SLICES ===
   papers: Record<string, Paper>;
   authors: Record<string, Author>;
   institutions: Record<string, Institution>;
+
+  // === RELATIONSHIP SLICES ===
   authorships: Record<string, Authorship>;
   paper_relationships: PaperRelationship[];
+
+  // === DEDUPLICATION INDEX ===
   external_id_index: Record<string, string>;
+
+  // === APP STATUS ===
   app_status: AppStatus;
-  
-  // Actions
+
+  // === ACTIONS ===
   setAppStatus: (status: Partial<AppStatus>) => void;
-  resetStore: () => void;
-  updatePaper: (id: string, changes: Partial<Paper>) => void;
-  setPapers: (papers: Record<string, Paper>) => void;
-  setAuthors: (authors: Record<string, Author>) => void;
-  setInstitutions: (institutions: Record<string, Institution>) => void;
-  setAuthorships: (authorships: Record<string, Authorship>) => void;
-  setPaperRelationships: (relationships: PaperRelationship[]) => void;
-  setExternalIdIndex: (index: Record<string, string>) => void;
-  setGraphData: (data: {
-    papers?: Record<string, Paper>;
-    authors?: Record<string, Author>;
-    institutions?: Record<string, Institution>;
-    authorships?: Record<string, Authorship>;
-    paper_relationships?: PaperRelationship[];
-    external_id_index?: Record<string, string>;
+  setState: (data: {
+    papers: Record<string, Paper>;
+    authors: Record<string, Author>;
+    institutions: Record<string, Institution>;
+    authorships: Record<string, Authorship>;
+    paper_relationships: PaperRelationship[];
+    external_id_index: Record<string, string>;
   }) => void;
 }
 
-const initialState = {
+export const useKnowledgeGraphStore = create<KnowledgeGraphStore>((set) => ({
+  // Initial state
   papers: {},
   authors: {},
   institutions: {},
@@ -94,39 +95,21 @@ const initialState = {
   paper_relationships: [],
   external_id_index: {},
   app_status: {
-    state: 'idle' as const,
-    message: null,
+    state: 'idle',
+    message: null
   },
-};
 
-export const useKnowledgeGraphStore = create<KnowledgeGraphStore>((set, get) => ({
-  ...initialState,
-  
-  setAppStatus: (status) => 
-    set((state) => ({
-      app_status: { ...state.app_status, ...status }
-    })),
-    
-  resetStore: () => set(initialState),
-  
-  updatePaper: (id, changes) =>
-    set((state) => ({
-      papers: {
-        ...state.papers,
-        [id]: { ...state.papers[id], ...changes }
-      }
-    })),
-    
-  setPapers: (papers) => set({ papers }),
-  setAuthors: (authors) => set({ authors }),
-  setInstitutions: (institutions) => set({ institutions }),
-  setAuthorships: (authorships) => set({ authorships }),
-  setPaperRelationships: (paper_relationships) => set({ paper_relationships }),
-  setExternalIdIndex: (external_id_index) => set({ external_id_index }),
-  
-  setGraphData: (data) =>
-    set((state) => ({
-      ...state,
-      ...data,
-    })),
+  // Actions
+  setAppStatus: (status) => set((state) => ({
+    app_status: { ...state.app_status, ...status }
+  })),
+
+  setState: (data) => set({
+    papers: data.papers,
+    authors: data.authors,
+    institutions: data.institutions,
+    authorships: data.authorships,
+    paper_relationships: data.paper_relationships,
+    external_id_index: data.external_id_index
+  })
 }));
