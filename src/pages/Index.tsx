@@ -81,7 +81,7 @@ const Index = () => {
       // Transform the results to match our expected interface
       const transformedResults = response.results.map(paper => ({
         id: paper.id,
-        doi: paper.doi,
+        doi: paper.doi, // Include the DOI
         title: paper.title || paper.display_name || 'Untitled',
         display_name: paper.display_name,
         authorships: paper.authorships || [],
