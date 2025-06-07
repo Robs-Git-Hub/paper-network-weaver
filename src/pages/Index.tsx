@@ -47,7 +47,7 @@ const Index = () => {
           setAppStatus({ state: app_status.state, message: payload.message });
           break;
         case 'graph/setState':
-          setState(payload.data);
+          setState(JSON.parse(payload.data));
           break;
         case 'app/setStatus':
           setAppStatus(payload);
