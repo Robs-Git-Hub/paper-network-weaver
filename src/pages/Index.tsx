@@ -115,7 +115,7 @@ const Index = () => {
   }
 
   // Main analysis view (active or enriching states)
-  if (app_status.state === 'active' || app_status.state === 'enriching') {
+  if (app_status.state === 'active' || app_status.state === 'enriching' || app_status.state === 'extending') {
     return (
       <div className="min-h-screen bg-background">
         <AppHeader isEnriching={app_status.state === 'enriching'} />
