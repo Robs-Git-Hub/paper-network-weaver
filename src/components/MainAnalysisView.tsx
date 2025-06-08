@@ -5,6 +5,7 @@ import { MasterPaperCard } from '@/components/MasterPaperCard';
 import { UnifiedCitationsTable } from '@/components/UnifiedCitationsTable';
 import { NetworkView } from '@/components/NetworkView';
 import { TopNav } from '@/components/TopNav';
+import { ExportButton } from '@/components/ExportButton';
 import { workerManager } from '@/services/workerManager';
 
 export const MainAnalysisView: React.FC = () => {
@@ -60,11 +61,14 @@ export const MainAnalysisView: React.FC = () => {
 
   return (
     <div className="space-y-8">
-      <TopNav 
-        items={['Table', 'Network']} 
-        active={currentView} 
-        onClick={handleViewChange} 
-      />
+      <div className="flex justify-between items-center">
+        <TopNav 
+          items={['Table', 'Network']} 
+          active={currentView} 
+          onClick={handleViewChange} 
+        />
+        <ExportButton />
+      </div>
       
       <MasterPaperCard paper={masterPaper} />
       
