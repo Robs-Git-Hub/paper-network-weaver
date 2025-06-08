@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef } from 'react';
 import { useKnowledgeGraphStore } from '@/store/knowledge-graph-store';
 import { MasterPaperCard } from '@/components/MasterPaperCard';
@@ -17,12 +16,12 @@ export const MainAnalysisView: React.FC = () => {
 
   // Automatically extend the graph once when master paper is available
   useEffect(() => {
-    if (masterPaper && !hasExtendedRef.current && app_status.state === 'active') {
+    if (masterPaper && !hasExtendedRef.current) {
       hasExtendedRef.current = true;
       setAppStatus({ state: 'extending', message: 'Extending graph...' });
       workerManager.extendGraph();
     }
-  }, [masterPaper, app_status.state, setAppStatus]);
+  }, [masterPaper, setAppStatus]);
 
   if (!masterPaper) {
     return (
