@@ -16,6 +16,7 @@ export interface Paper {
   best_oa_url: string | null;
   oa_status: string | null;
   is_stub: boolean;
+  relationship_tags: string[];
 }
 
 export interface Author {

@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,6 +12,7 @@ import { CitationPopup } from '@/components/CitationPopup';
 
 interface CitationsTableProps {
   papers: Paper[];
+  showRelationshipTags?: boolean;
 }
 
 interface AbstractModalProps {
@@ -69,7 +69,7 @@ const AbstractModal: React.FC<AbstractModalProps> = ({ paper, children }) => {
   );
 };
 
-export const CitationsTable: React.FC<CitationsTableProps> = ({ papers }) => {
+export const CitationsTable: React.FC<CitationsTableProps> = ({ papers, showRelationshipTags = false }) => {
   const { authors, authorships, paper_relationships } = useKnowledgeGraphStore();
   const isMobile = useIsMobile();
   const [sortField, setSortField] = useState<SortField>('citations');
@@ -165,6 +165,24 @@ export const CitationsTable: React.FC<CitationsTableProps> = ({ papers }) => {
     </TableHead>
   );
 
+  const getRelationshipTagLabel = (tag: string) => {
+    switch (tag) {
+      case '1st_degree': return 'Direct';
+      case '2nd_degree': return '2nd Degree';
+      case 'referenced_by_1st_degree': return 'Co-Cited';
+      default: return tag;
+    }
+  };
+
+  const getRelationshipTagColor = (tag: string) => {
+    switch (tag) {
+      case '1st_degree': return 'bg-blue-100 text-blue-800';
+      case '2nd_degree': return 'bg-green-100 text-green-800';
+      case 'referenced_by_1st_degree': return 'bg-purple-100 text-purple-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
   // Mobile card layout
   if (isMobile) {
     return (
@@ -180,6 +198,18 @@ export const CitationsTable: React.FC<CitationsTableProps> = ({ papers }) => {
                 <CardTitle className="text-base font-medium leading-tight">
                   {paper.title}
                 </CardTitle>
+                {showRelationshipTags && paper.relationship_tags && paper.relationship_tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {paper.relationship_tags.map(tag => (
+                      <Badge 
+                        key={tag} 
+                        className={`text-xs ${getRelationshipTagColor(tag)}`}
+                      >
+                        {getRelationshipTagLabel(tag)}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex flex-wrap gap-1">
@@ -275,6 +305,7 @@ export const CitationsTable: React.FC<CitationsTableProps> = ({ papers }) => {
               <SortableHeader field="year">Year</SortableHeader>
               <SortableHeader field="citations">Citations</SortableHeader>
               <SortableHeader field="location">Published In</SortableHeader>
+              {showRelationshipTags && <TableHead>Type</TableHead>}
               <TableHead>Text</TableHead>
               <TableHead>Abstract</TableHead>
             </TableRow>
@@ -317,6 +348,20 @@ export const CitationsTable: React.FC<CitationsTableProps> = ({ papers }) => {
                   <TableCell className="max-w-xs">
                     <div className="line-clamp-1">{paper.location || 'N/A'}</div>
                   </TableCell>
+                  {showRelationshipTags && (
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {paper.relationship_tags?.map(tag => (
+                          <Badge 
+                            key={tag} 
+                            className={`text-xs ${getRelationshipTagColor(tag)}`}
+                          >
+                            {getRelationshipTagLabel(tag)}
+                          </Badge>
+                        )) || null}
+                      </div>
+                    </TableCell>
+                  )}
                   <TableCell>
                     {paper.best_oa_url && (
                       <Button 

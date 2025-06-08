@@ -66,6 +66,16 @@ export async function fetchFirstDegreeCitations(
       utils.findByExternalId
     );
     
+    // Add 1st_degree tag to this paper
+    if (state.papers[paperUid]) {
+      if (!state.papers[paperUid].relationship_tags) {
+        state.papers[paperUid].relationship_tags = [];
+      }
+      if (!state.papers[paperUid].relationship_tags.includes('1st_degree')) {
+        state.papers[paperUid].relationship_tags.push('1st_degree');
+      }
+    }
+    
     state.paperRelationships.push({
       source_short_uid: paperUid,
       target_short_uid: state.masterPaperUid!,
@@ -141,6 +151,16 @@ export async function createStubsFromOpenAlexIds(
       utils.addToExternalIndex, 
       utils.findByExternalId
     );
+    
+    // Add relationship tag to the paper
+    if (tag && state.papers[stubUid]) {
+      if (!state.papers[stubUid].relationship_tags) {
+        state.papers[stubUid].relationship_tags = [];
+      }
+      if (!state.papers[stubUid].relationship_tags.includes(tag)) {
+        state.papers[stubUid].relationship_tags.push(tag);
+      }
+    }
     
     const relationship: PaperRelationship = {
       source_short_uid: relationshipType === 'cites' ? state.masterPaperUid! : state.masterPaperUid!,
@@ -230,6 +250,16 @@ export async function fetchSecondDegreeCitations(
         utils.addToExternalIndex, 
         utils.findByExternalId
       );
+      
+      // Add 2nd_degree tag to this paper
+      if (state.papers[paperUid]) {
+        if (!state.papers[paperUid].relationship_tags) {
+          state.papers[paperUid].relationship_tags = [];
+        }
+        if (!state.papers[paperUid].relationship_tags.includes('2nd_degree')) {
+          state.papers[paperUid].relationship_tags.push('2nd_degree');
+        }
+      }
       
       // Add to new data collections
       newPapers[paperUid] = state.papers[paperUid];
