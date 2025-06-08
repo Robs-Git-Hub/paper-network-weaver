@@ -64,7 +64,7 @@ export const MainAnalysisView: React.FC<MainAnalysisViewProps> = ({
 
   return (
     <div className="space-y-8">
-      {/* Desktop Navigation */}
+      {/* Desktop Navigation - only visible on desktop */}
       <div className="hidden sm:flex justify-between items-center">
         <TopNav 
           items={['Table', 'Network']} 

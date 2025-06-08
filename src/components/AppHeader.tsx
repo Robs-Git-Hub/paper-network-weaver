@@ -43,18 +43,8 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           ACE
         </button>
         
-        {/* Desktop Navigation */}
+        {/* Desktop Navigation - No view controls, only status */}
         <div className="hidden sm:flex items-center gap-4">
-          {showViewControls && onViewChange && (
-            <TopNav 
-              items={['Table', 'Network']} 
-              active={currentView} 
-              onClick={onViewChange} 
-            />
-          )}
-          
-          {showViewControls && <ExportButton />}
-          
           {isEnriching && (
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 bg-[#437e84] rounded-full animate-pulse" />
