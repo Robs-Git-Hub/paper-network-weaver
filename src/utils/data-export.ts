@@ -1,6 +1,6 @@
 
 import JSZip from 'jszip';
-import { saveAs } from 'file-saver';
+import { saveAs } from 'file-saver-es';
 import type { Paper, Author, Institution, Authorship, PaperRelationship } from '@/store/knowledge-graph-store';
 
 interface ExportableData {
