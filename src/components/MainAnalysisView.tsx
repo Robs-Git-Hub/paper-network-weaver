@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useKnowledgeGraphStore } from '@/store/knowledge-graph-store';
 import { MasterPaperCard } from '@/components/MasterPaperCard';
 import { UnifiedCitationsTable } from '@/components/UnifiedCitationsTable';
+import { NetworkView } from '@/components/NetworkView';
 import { TopNav } from '@/components/TopNav';
 import { workerManager } from '@/services/workerManager';
 
@@ -51,11 +52,7 @@ export const MainAnalysisView: React.FC = () => {
       case 'Table':
         return <UnifiedCitationsTable papers={citationPapers} />;
       case 'Network':
-        return (
-          <div className="text-center py-20">
-            <p className="text-muted-foreground">Network view coming soon</p>
-          </div>
-        );
+        return <NetworkView papers={citationPapers} masterPaper={masterPaper} />;
       default:
         return <UnifiedCitationsTable papers={citationPapers} />;
     }

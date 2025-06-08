@@ -1,42 +1,21 @@
 
-import React, { useState, useMemo } from 'react';
+import React from 'react';
 import { CitationsTable } from '@/components/CitationsTable';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { Badge } from '@/components/ui/badge';
+import { FilterControls } from '@/components/FilterControls';
+import { useRelationshipFilters } from '@/hooks/useRelationshipFilters';
 import type { Paper } from '@/store/knowledge-graph-store';
 
 interface UnifiedCitationsTableProps {
   papers: Paper[];
 }
 
-const RELATIONSHIP_FILTERS = [
-  { value: '1st_degree', label: 'Direct Citations', description: 'Papers that directly cite the master paper' },
-  { value: '2nd_degree', label: 'Second-Degree', description: 'Papers that cite the direct citations' },
-  { value: 'referenced_by_1st_degree', label: 'Commonly Co-Cited', description: 'Papers commonly referenced by direct citations' },
-  { value: 'similar', label: 'Similar Papers', description: 'Papers identified as related through OpenAlex similarity' }
-];
-
 export const UnifiedCitationsTable: React.FC<UnifiedCitationsTableProps> = ({ papers }) => {
-  const [activeFilters, setActiveFilters] = useState<string[]>(['1st_degree', '2nd_degree', 'referenced_by_1st_degree', 'similar']);
-
-  const filteredPapers = useMemo(() => {
-    if (activeFilters.length === 0) return papers;
-    
-    return papers.filter(paper => 
-      paper.relationship_tags?.some(tag => activeFilters.includes(tag))
-    );
-  }, [papers, activeFilters]);
-
-  const getFilterCounts = () => {
-    return RELATIONSHIP_FILTERS.map(filter => ({
-      ...filter,
-      count: papers.filter(paper => 
-        paper.relationship_tags?.includes(filter.value)
-      ).length
-    }));
-  };
-
-  const filterCounts = getFilterCounts();
+  const {
+    activeFilters,
+    setActiveFilters,
+    filteredPapers,
+    filterCounts
+  } = useRelationshipFilters(papers);
 
   if (papers.length === 0) {
     return (
@@ -48,38 +27,13 @@ export const UnifiedCitationsTable: React.FC<UnifiedCitationsTableProps> = ({ pa
 
   return (
     <div className="space-y-6">
-      <div className="space-y-3">
-        <div className="text-sm font-medium">Relationship Types:</div>
-        <ToggleGroup 
-          type="multiple" 
-          value={activeFilters} 
-          onValueChange={setActiveFilters}
-          className="justify-start flex-wrap gap-2"
-        >
-          {filterCounts.map(filter => (
-            <ToggleGroupItem 
-              key={filter.value} 
-              value={filter.value} 
-              variant="outline"
-              className="data-[state=on]:bg-[#437e84] data-[state=on]:text-white"
-            >
-              <div className="flex items-center gap-2">
-                <span>{filter.label}</span>
-                <Badge variant="secondary" className="text-xs">
-                  {filter.count}
-                </Badge>
-              </div>
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
-        
-        <div className="text-xs text-muted-foreground">
-          {activeFilters.length > 0 
-            ? `Showing ${filteredPapers.length} of ${papers.length} papers`
-            : 'Select filters to view papers'
-          }
-        </div>
-      </div>
+      <FilterControls
+        filters={filterCounts}
+        activeFilters={activeFilters}
+        onFiltersChange={setActiveFilters}
+        totalCount={papers.length}
+        filteredCount={filteredPapers.length}
+      />
 
       {filteredPapers.length > 0 ? (
         <CitationsTable papers={filteredPapers} showRelationshipTags />
