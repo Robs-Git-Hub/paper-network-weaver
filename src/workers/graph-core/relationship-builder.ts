@@ -122,7 +122,7 @@ export async function createStubsFromOpenAlexIds(
   relationshipType: 'cites' | 'similar', 
   state: GraphState, 
   utils: UtilityFunctions,
-  tag?: string
+  tag?: '1st_degree' | '2nd_degree' | 'referenced_by_1st_degree' | 'similar'
 ) {
   if (openAlexIds.length === 0) return;
   
