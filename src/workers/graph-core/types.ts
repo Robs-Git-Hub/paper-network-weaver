@@ -1,3 +1,4 @@
+
 // Shared types for the graph worker modules
 
 export interface Paper {
@@ -46,7 +47,7 @@ export interface PaperRelationship {
   source_short_uid: string;
   target_short_uid: string;
   relationship_type: 'cites' | 'similar';
-  tag?: 'referenced_by_1st_degree';
+  tag?: '1st_degree' | '2nd_degree' | 'referenced_by_1st_degree' | 'similar';
 }
 
 // Worker message types
