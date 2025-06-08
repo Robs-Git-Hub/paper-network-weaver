@@ -1,14 +1,13 @@
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useKnowledgeGraphStore } from '@/store/knowledge-graph-store';
 import { MasterPaperCard } from '@/components/MasterPaperCard';
 import { UnifiedCitationsTable } from '@/components/UnifiedCitationsTable';
-import { Button } from '@/components/ui/button';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { workerManager } from '@/services/workerManager';
 
 export const MainAnalysisView: React.FC = () => {
   const { papers, app_status, setAppStatus } = useKnowledgeGraphStore();
+  const hasExtendedRef = useRef(false);
   
   // Find the master paper (the one that's not a stub and has the most relationships)
   const masterPaper = Object.values(papers).find(paper => !paper.is_stub);
@@ -16,10 +15,14 @@ export const MainAnalysisView: React.FC = () => {
   console.log('[MainAnalysisView] Master paper:', masterPaper);
   console.log('[MainAnalysisView] All papers:', Object.keys(papers).length);
 
-  const handleExtendNetwork = () => {
-    setAppStatus({ state: 'extending', message: 'Extending graph...' });
-    workerManager.extendGraph();
-  };
+  // Automatically extend the graph once when master paper is available
+  useEffect(() => {
+    if (masterPaper && !hasExtendedRef.current && app_status.state === 'active') {
+      hasExtendedRef.current = true;
+      setAppStatus({ state: 'extending', message: 'Extending graph...' });
+      workerManager.extendGraph();
+    }
+  }, [masterPaper, app_status.state, setAppStatus]);
 
   if (!masterPaper) {
     return (
@@ -43,23 +46,6 @@ export const MainAnalysisView: React.FC = () => {
       
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-semibold">Citation Network</h2>
-        
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                onClick={handleExtendNetwork}
-                disabled={app_status.state === 'extending'}
-                className="bg-[#437e84] hover:bg-[#437e84]/90"
-              >
-                {app_status.state === 'extending' ? 'Extending...' : 'Extend Network'}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Identify 2nd degree citations and highly relevant non-citation papers</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
       </div>
 
       <UnifiedCitationsTable papers={citationPapers} />

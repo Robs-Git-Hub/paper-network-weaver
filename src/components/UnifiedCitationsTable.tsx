@@ -12,7 +12,7 @@ interface UnifiedCitationsTableProps {
 const RELATIONSHIP_FILTERS = [
   { value: '1st_degree', label: 'Direct Citations', description: 'Papers that directly cite the master paper' },
   { value: '2nd_degree', label: 'Second-Degree', description: 'Papers that cite the direct citations' },
-  { value: 'referenced_by_1st_degree', label: 'Co-Cited Papers', description: 'Papers frequently referenced by direct citations' },
+  { value: 'referenced_by_1st_degree', label: 'Commonly Co-Cited', description: 'Papers commonly referenced by direct citations' },
   { value: 'similar', label: 'Similar Papers', description: 'Papers identified as related through OpenAlex similarity' }
 ];
 
