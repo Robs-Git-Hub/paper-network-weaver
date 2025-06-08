@@ -8,6 +8,9 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 
+// Import verification script to test file-saver
+import "./utils/verify-file-saver";
+
 const queryClient = new QueryClient();
 
 const App = () => {
