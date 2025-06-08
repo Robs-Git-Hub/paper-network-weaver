@@ -68,9 +68,6 @@ export async function fetchFirstDegreeCitations(
     
     // Add 1st_degree tag to this paper
     if (state.papers[paperUid]) {
-      if (!state.papers[paperUid].relationship_tags) {
-        state.papers[paperUid].relationship_tags = [];
-      }
       if (!state.papers[paperUid].relationship_tags.includes('1st_degree')) {
         state.papers[paperUid].relationship_tags.push('1st_degree');
       }
@@ -114,7 +111,7 @@ export async function fetchFirstDegreeCitations(
   }
   
   if (frequentRelated.length > 0) {
-    await createStubsFromOpenAlexIds(frequentRelated, 'similar', state, utils);
+    await createStubsFromOpenAlexIds(frequentRelated, 'similar', state, utils, 'similar');
   }
   
   console.log(`[Worker] Phase A, Step 2: Processed ${data.results.length} citations, found ${referencedBy1stDegreeIds.length} referenced_by_1st_degree stubs and ${frequentRelated.length} frequent similar stubs.`);
@@ -125,7 +122,7 @@ export async function createStubsFromOpenAlexIds(
   relationshipType: 'cites' | 'similar', 
   state: GraphState, 
   utils: UtilityFunctions,
-  tag?: 'referenced_by_1st_degree'
+  tag?: string
 ) {
   if (openAlexIds.length === 0) return;
   
@@ -154,9 +151,6 @@ export async function createStubsFromOpenAlexIds(
     
     // Add relationship tag to the paper
     if (tag && state.papers[stubUid]) {
-      if (!state.papers[stubUid].relationship_tags) {
-        state.papers[stubUid].relationship_tags = [];
-      }
       if (!state.papers[stubUid].relationship_tags.includes(tag)) {
         state.papers[stubUid].relationship_tags.push(tag);
       }
@@ -253,9 +247,6 @@ export async function fetchSecondDegreeCitations(
       
       // Add 2nd_degree tag to this paper
       if (state.papers[paperUid]) {
-        if (!state.papers[paperUid].relationship_tags) {
-          state.papers[paperUid].relationship_tags = [];
-        }
         if (!state.papers[paperUid].relationship_tags.includes('2nd_degree')) {
           state.papers[paperUid].relationship_tags.push('2nd_degree');
         }
@@ -588,7 +579,8 @@ async function processSemanticScholarPaper(
     keywords: [],
     best_oa_url: paperData.openAccessPdf?.url || null,
     oa_status: null,
-    is_stub: isStub
+    is_stub: isStub,
+    relationship_tags: []
   };
   
   state.papers[paperUid] = paper;

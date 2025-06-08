@@ -47,7 +47,8 @@ export async function processOpenAlexPaper(
     keywords: extractKeywords(paperData.keywords),
     best_oa_url: paperData.open_access?.oa_url || null,
     oa_status: paperData.open_access?.oa_status || null,
-    is_stub: isStub
+    is_stub: isStub,
+    relationship_tags: []
   };
 
   papers[paperUid] = paper;

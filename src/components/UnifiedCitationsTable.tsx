@@ -12,11 +12,12 @@ interface UnifiedCitationsTableProps {
 const RELATIONSHIP_FILTERS = [
   { value: '1st_degree', label: 'Direct Citations', description: 'Papers that directly cite the master paper' },
   { value: '2nd_degree', label: 'Second-Degree', description: 'Papers that cite the direct citations' },
-  { value: 'referenced_by_1st_degree', label: 'Co-Cited Papers', description: 'Papers frequently referenced by direct citations' }
+  { value: 'referenced_by_1st_degree', label: 'Co-Cited Papers', description: 'Papers frequently referenced by direct citations' },
+  { value: 'similar', label: 'Similar Papers', description: 'Papers identified as related through OpenAlex similarity' }
 ];
 
 export const UnifiedCitationsTable: React.FC<UnifiedCitationsTableProps> = ({ papers }) => {
-  const [activeFilters, setActiveFilters] = useState<string[]>(['1st_degree', '2nd_degree', 'referenced_by_1st_degree']);
+  const [activeFilters, setActiveFilters] = useState<string[]>(['1st_degree', '2nd_degree', 'referenced_by_1st_degree', 'similar']);
 
   const filteredPapers = useMemo(() => {
     if (activeFilters.length === 0) return papers;
