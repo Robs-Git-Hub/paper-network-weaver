@@ -43,10 +43,10 @@ export interface NetworkCategory {
 }
 
 const RELATIONSHIP_COLORS = {
-  '1st_degree': '#437e84',
-  '2nd_degree': '#22c55e',
-  'referenced_by_1st_degree': '#a855f7',
-  'similar': '#f59e0b'
+  '1st_degree': '#ffa600',        // Direct citations
+  '2nd_degree': '#5ba75a',        // Second-Degree
+  'referenced_by_1st_degree': '#a6af24', // Co-Cited
+  'similar': '#2c957e'            // Similar
 };
 
 const getNodeColor = (relationshipTags: string[]) => {
@@ -77,7 +77,7 @@ export const transformPapersToNetwork = (
   // Create nodes
   const nodes: NetworkNode[] = [];
   const categories: NetworkCategory[] = [
-    { name: 'Master Paper', itemStyle: { color: '#1f2937' } },
+    { name: 'Master Paper', itemStyle: { color: '#437e84' } },
     { name: 'Direct Citations', itemStyle: { color: RELATIONSHIP_COLORS['1st_degree'] } },
     { name: 'Second-Degree', itemStyle: { color: RELATIONSHIP_COLORS['2nd_degree'] } },
     { name: 'Co-Cited', itemStyle: { color: RELATIONSHIP_COLORS['referenced_by_1st_degree'] } },
@@ -98,7 +98,7 @@ export const transformPapersToNetwork = (
     value: masterPaper.cited_by_count,
     category: 0, // Master paper category
     symbolSize: 80,
-    itemStyle: { color: '#1f2937' },
+    itemStyle: { color: '#437e84' },
     label: { show: true },
     paperData: {
       title: masterPaper.title,
