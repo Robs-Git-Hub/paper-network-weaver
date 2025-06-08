@@ -30,6 +30,7 @@ const Index = () => {
   const [searchResults, setSearchResults] = useState<PaperResult[]>([]);
   const [totalCount, setTotalCount] = useState<number | undefined>();
   const [isSearching, setIsSearching] = useState(false);
+  const [currentView, setCurrentView] = useState('Table');
   
   const { app_status, setAppStatus } = useKnowledgeGraphStore();
 
@@ -72,6 +73,10 @@ const Index = () => {
     
     // Start processing with the worker
     workerManager.processMasterPaper(paper);
+  };
+
+  const handleViewChange = (viewName: string) => {
+    setCurrentView(viewName);
   };
 
   // Loading state during Phase A
@@ -118,9 +123,17 @@ const Index = () => {
   if (app_status.state === 'active' || app_status.state === 'enriching' || app_status.state === 'extending') {
     return (
       <div className="min-h-screen bg-background">
-        <AppHeader isEnriching={app_status.state === 'enriching'} />
+        <AppHeader 
+          isEnriching={app_status.state === 'enriching'} 
+          currentView={currentView}
+          onViewChange={handleViewChange}
+          showViewControls={true}
+        />
         <div className="container mx-auto px-4 py-8">
-          <MainAnalysisView />
+          <MainAnalysisView 
+            currentView={currentView}
+            onViewChange={handleViewChange}
+          />
         </div>
       </div>
     );
@@ -128,26 +141,29 @@ const Index = () => {
 
   // Initial search interface
   return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4">
-      <div className="w-full max-w-4xl space-y-8">
-        <div className="text-center space-y-4">
-          <h1 className="text-4xl font-bold tracking-tight">
-            Academic Citation Explorer
-          </h1>
-          <p className="text-xl text-muted-foreground">
-            Search for a research paper to build and analyze its citation network
-          </p>
+    <div className="min-h-screen bg-background flex flex-col">
+      <AppHeader />
+      <div className="flex-1 flex flex-col items-center justify-center px-4 mt-[20vh] sm:mt-0">
+        <div className="w-full max-w-4xl space-y-8">
+          <div className="text-center space-y-4">
+            <h1 className="text-4xl font-bold tracking-tight">
+              Academic Citation Explorer
+            </h1>
+            <p className="text-xl text-muted-foreground">
+              Search for a research paper to build and analyze its citation network
+            </p>
+          </div>
+
+          <SearchBar onSearch={handleSearch} isLoading={isSearching} />
+
+          {searchResults.length > 0 && (
+            <PaperSelector
+              papers={searchResults}
+              onSelectPaper={handleSelectPaper}
+              totalCount={totalCount}
+            />
+          )}
         </div>
-
-        <SearchBar onSearch={handleSearch} isLoading={isSearching} />
-
-        {searchResults.length > 0 && (
-          <PaperSelector
-            papers={searchResults}
-            onSelectPaper={handleSelectPaper}
-            totalCount={totalCount}
-          />
-        )}
       </div>
     </div>
   );

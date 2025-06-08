@@ -8,10 +8,17 @@ import { TopNav } from '@/components/TopNav';
 import { ExportButton } from '@/components/ExportButton';
 import { workerManager } from '@/services/workerManager';
 
-export const MainAnalysisView: React.FC = () => {
+interface MainAnalysisViewProps {
+  onViewChange?: (viewName: string) => void;
+  currentView?: string;
+}
+
+export const MainAnalysisView: React.FC<MainAnalysisViewProps> = ({ 
+  onViewChange, 
+  currentView = 'Table' 
+}) => {
   const { papers, app_status, setAppStatus } = useKnowledgeGraphStore();
   const hasExtendedRef = useRef(false);
-  const [currentView, setCurrentView] = useState('Table');
   
   // Find the master paper (the one that's not a stub and has the most relationships)
   const masterPaper = Object.values(papers).find(paper => !paper.is_stub);
@@ -27,10 +34,6 @@ export const MainAnalysisView: React.FC = () => {
       workerManager.extendGraph();
     }
   }, [masterPaper, setAppStatus]);
-
-  const handleViewChange = (viewName: string) => {
-    setCurrentView(viewName);
-  };
 
   if (!masterPaper) {
     return (
@@ -61,11 +64,12 @@ export const MainAnalysisView: React.FC = () => {
 
   return (
     <div className="space-y-8">
-      <div className="flex justify-between items-center">
+      {/* Desktop Navigation */}
+      <div className="hidden sm:flex justify-between items-center">
         <TopNav 
           items={['Table', 'Network']} 
           active={currentView} 
-          onClick={handleViewChange} 
+          onClick={onViewChange || (() => {})} 
         />
         <ExportButton />
       </div>
