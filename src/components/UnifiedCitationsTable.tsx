@@ -48,45 +48,36 @@ export const UnifiedCitationsTable: React.FC<UnifiedCitationsTableProps> = ({ pa
 
   return (
     <div className="space-y-6">
-      <div className="space-y-4">
-        <div>
-          <h3 className="text-xl font-semibold mb-2">Citation Analysis</h3>
-          <p className="text-sm text-muted-foreground">
-            Filter papers by their relationship to the master paper
-          </p>
-        </div>
+      <div className="space-y-3">
+        <div className="text-sm font-medium">Relationship Types:</div>
+        <ToggleGroup 
+          type="multiple" 
+          value={activeFilters} 
+          onValueChange={setActiveFilters}
+          className="justify-start flex-wrap gap-2"
+        >
+          {filterCounts.map(filter => (
+            <ToggleGroupItem 
+              key={filter.value} 
+              value={filter.value} 
+              variant="outline"
+              className="data-[state=on]:bg-[#437e84] data-[state=on]:text-white"
+            >
+              <div className="flex items-center gap-2">
+                <span>{filter.label}</span>
+                <Badge variant="secondary" className="text-xs">
+                  {filter.count}
+                </Badge>
+              </div>
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
         
-        <div className="space-y-3">
-          <div className="text-sm font-medium">Relationship Types:</div>
-          <ToggleGroup 
-            type="multiple" 
-            value={activeFilters} 
-            onValueChange={setActiveFilters}
-            className="justify-start flex-wrap gap-2"
-          >
-            {filterCounts.map(filter => (
-              <ToggleGroupItem 
-                key={filter.value} 
-                value={filter.value} 
-                variant="outline"
-                className="data-[state=on]:bg-[#437e84] data-[state=on]:text-white"
-              >
-                <div className="flex items-center gap-2">
-                  <span>{filter.label}</span>
-                  <Badge variant="secondary" className="text-xs">
-                    {filter.count}
-                  </Badge>
-                </div>
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
-          
-          <div className="text-xs text-muted-foreground">
-            {activeFilters.length > 0 
-              ? `Showing ${filteredPapers.length} of ${papers.length} papers`
-              : 'Select filters to view papers'
-            }
-          </div>
+        <div className="text-xs text-muted-foreground">
+          {activeFilters.length > 0 
+            ? `Showing ${filteredPapers.length} of ${papers.length} papers`
+            : 'Select filters to view papers'
+          }
         </div>
       </div>
 

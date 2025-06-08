@@ -1,12 +1,15 @@
-import React, { useEffect, useRef } from 'react';
+
+import React, { useEffect, useRef, useState } from 'react';
 import { useKnowledgeGraphStore } from '@/store/knowledge-graph-store';
 import { MasterPaperCard } from '@/components/MasterPaperCard';
 import { UnifiedCitationsTable } from '@/components/UnifiedCitationsTable';
+import { TopNav } from '@/components/TopNav';
 import { workerManager } from '@/services/workerManager';
 
 export const MainAnalysisView: React.FC = () => {
   const { papers, app_status, setAppStatus } = useKnowledgeGraphStore();
   const hasExtendedRef = useRef(false);
+  const [currentView, setCurrentView] = useState('Table');
   
   // Find the master paper (the one that's not a stub and has the most relationships)
   const masterPaper = Object.values(papers).find(paper => !paper.is_stub);
@@ -22,6 +25,10 @@ export const MainAnalysisView: React.FC = () => {
       workerManager.extendGraph();
     }
   }, [masterPaper, setAppStatus]);
+
+  const handleViewChange = (viewName: string) => {
+    setCurrentView(viewName);
+  };
 
   if (!masterPaper) {
     return (
@@ -39,15 +46,35 @@ export const MainAnalysisView: React.FC = () => {
   
   console.log('[MainAnalysisView] Citation papers:', citationPapers.length);
 
+  const renderCurrentView = () => {
+    switch (currentView) {
+      case 'Table':
+        return <UnifiedCitationsTable papers={citationPapers} />;
+      case 'Network':
+        return (
+          <div className="text-center py-20">
+            <p className="text-muted-foreground">Network view coming soon</p>
+          </div>
+        );
+      default:
+        return <UnifiedCitationsTable papers={citationPapers} />;
+    }
+  };
+
   return (
     <div className="space-y-8">
+      <TopNav 
+        items={['Table', 'Network']} 
+        active={currentView} 
+        onClick={handleViewChange} 
+      />
+      
       <MasterPaperCard paper={masterPaper} />
       
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-semibold">Citation Network</h2>
+      <div>
+        <h2 className="text-2xl font-semibold mb-6">Related Papers</h2>
+        {renderCurrentView()}
       </div>
-
-      <UnifiedCitationsTable papers={citationPapers} />
     </div>
   );
 };
