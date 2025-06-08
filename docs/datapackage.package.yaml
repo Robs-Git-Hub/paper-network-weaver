@@ -1,0 +1,317 @@
+profile: tabular-data-package
+name: connected-paper-graph
+title: Connected Paper Graph
+description: >
+  A scholarly knowledge graph containing papers, authors, institutions, and their
+  relationships, generated from OpenAlex and Semantic Scholar. This datapackage
+  defines the schema for data export.
+version: 1.1.0
+created: 2025-06-07
+resources:
+  - name: papers
+    path: papers.csv
+    title: Papers
+    format: csv
+    profile: tabular-data-resource
+    schema:
+      fields:
+        - name: short_uid
+          type: string
+          description: The app-generated, unique, persistent identifier for this paper.
+          constraints:
+            required: true
+            unique: true
+        - name: title
+          type: string
+          description: The title of the paper.
+        - name: publication_year
+          type: integer
+          description: The year the paper was published.
+        - name: publication_date
+          type: date
+          description: The full date the paper was published.
+        - name: location
+          type: string
+          description: The primary place where the paper was published (e.g. a journal name).
+        - name: abstract
+          type: string
+          description: The full abstract of the paper.
+        - name: fwci
+          type: number
+          description: The Field-Weighted Citation Impact score from OpenAlex.
+        - name: cited_by_count
+          type: integer
+          description: The total number of times this work has been cited.
+        - name: type
+          type: string
+          description: The type of work, e.g., 'article', 'book-chapter'.
+        - name: language
+          type: string
+          description: The primary language of the paper (ISO 639-1 code).
+        - name: oa_status
+          type: string
+          description: The Open Access status of the paper (e.g., 'gold', 'green', 'closed').
+        - name: best_oa_url
+          type: string
+          format: uri
+          description: The direct URL to the best-known Open Access PDF.
+        - name: is_stub
+          type: boolean
+          format: uri
+          description: TRUE if the paper record is a stub.
+      primaryKey: short_uid
+      missingValues: [""]
+  - name: authors
+    path: authors.csv
+    title: Authors
+    format: csv
+    profile: tabular-data-resource
+    schema:
+      fields:
+        - name: short_uid
+          type: string
+          description: The app-generated, unique, persistent identifier for this author.
+          constraints:
+            required: true
+            unique: true
+        - name: clean_name
+          type: string
+          description: The canonical, most complete name for the author.
+        - name: orcid
+          type: string
+          format: uri
+          description: The author's ORCID identifier URL.
+        - name: is_stub
+          type: boolean
+          description: TRUE if the author was created from sparse data and may need enrichment.
+      primaryKey: short_uid
+      missingValues: [""]
+  - name: institutions
+    path: institutions.csv
+    title: Institutions
+    format: csv
+    profile: tabular-data-resource
+    schema:
+      fields:
+        - name: short_uid
+          type: string
+          description: The app-generated, unique, persistent identifier for this institution.
+          constraints:
+            required: true
+            unique: true
+        - name: ror_id
+          type: string
+          format: uri
+          description: The Research Organization Registry (ROR) ID for this institution.
+        - name: display_name
+          type: string
+          description: The display name of the institution.
+        - name: country_code
+          type: string
+          description: The ISO 3166-1 alpha-2 country code.
+        - name: type
+          type: string
+          description: The type of institution, e.g., 'education', 'funder'.
+      primaryKey: short_uid
+      missingValues: [""]
+  - name: paper_keywords
+    path: paper_keywords.csv
+    title: Paper Keywords
+    description: A join table linking papers to their keywords.
+    format: csv
+    profile: tabular-data-resource
+    schema:
+      fields:
+        - name: paper_short_uid
+          type: string
+          description: Foreign key to the papers table.
+        - name: keyword
+          type: string
+          description: A single keyword associated with the paper.
+      primaryKey: [paper_short_uid, keyword]
+      foreignKeys:
+        - fields: paper_short_uid
+          reference:
+            resource: papers
+            fields: short_uid
+      missingValues: [""]
+  - name: paper_to_externalid
+    path: paper_to_externalid.csv
+    title: Paper to External ID Links
+    format: csv
+    profile: tabular-data-resource
+    schema:
+      fields:
+        - name: paper_short_uid
+          type: string
+          description: Foreign key to the papers table.
+        - name: external_id_type
+          type: string
+          description: The type of the external ID (e.g., 'doi', 'openalex', 'ss').
+        - name: external_id
+          type: string
+          description: The value of the external identifier.
+      primaryKey: [external_id_type, external_id]
+      foreignKeys:
+        - fields: paper_short_uid
+          reference:
+            resource: papers
+            fields: short_uid
+      missingValues: [""]
+  - name: author_to_externalid
+    path: author_to_externalid.csv
+    title: Author to External ID Links
+    format: csv
+    profile: tabular-data-resource
+    schema:
+      fields:
+        - name: author_short_uid
+          type: string
+          description: Foreign key to the authors table.
+        - name: external_id_type
+          type: string
+          description: The type of the external ID (e.g., 'openalex', 'ss').
+        - name: external_id
+          type: string
+          description: The value of the external identifier.
+      primaryKey: [external_id_type, external_id]
+      foreignKeys:
+        - fields: author_short_uid
+          reference:
+            resource: authors
+            fields: short_uid
+      missingValues: [""]
+  - name: institution_to_externalid
+    path: institution_to_externalid.csv
+    title: Institution to External ID Links
+    format: csv
+    profile: tabular-data-resource
+    schema:
+      fields:
+        - name: institution_short_uid
+          type: string
+          description: Foreign key to the institutions table.
+        - name: external_id_type
+          type: string
+          description: The type of the external ID (e.g., 'ror', 'openalex').
+        - name: external_id
+          type: string
+          description: The value of the external identifier.
+      primaryKey: [external_id_type, external_id]
+      foreignKeys:
+        - fields: institution_short_uid
+          reference:
+            resource: institutions
+            fields: short_uid
+      missingValues: [""]
+  - name: authorships
+    path: authorships.csv
+    title: Authorships
+    format: csv
+    profile: tabular-data-resource
+    schema:
+      fields:
+        - name: paper_short_uid
+          type: string
+          description: Foreign key to the papers table.
+        - name: author_short_uid
+          type: string
+          description: Foreign key to the authors table.
+        - name: author_position
+          type: integer
+          description: The sequential order of the author on the paper (1-based).
+        - name: is_corresponding
+          type: boolean
+          description: TRUE if this author was a corresponding author for this paper.
+        - name: raw_author_name
+          type: string
+          description: The exact name string used for the author on this specific paper.
+      primaryKey: [paper_short_uid, author_short_uid]
+      foreignKeys:
+        - fields: paper_short_uid
+          reference:
+            resource: papers
+            fields: short_uid
+        - fields: author_short_uid
+          reference:
+            resource: authors
+            fields: short_uid
+      missingValues: [""]
+  - name: authorship_institutions
+    path: authorship_institutions.csv
+    title: Authorship to Institution Links
+    format: csv
+    profile: tabular-data-resource
+    schema:
+      fields:
+        - name: paper_short_uid
+          type: string
+          description: Part of the composite foreign key to the authorships table.
+        - name: author_short_uid
+          type: string
+          description: Part of the composite foreign key to the authorships table.
+        - name: institution_short_uid
+          type: string
+          description: Foreign key to the institutions table.
+      primaryKey: [paper_short_uid, author_short_uid, institution_short_uid]
+      foreignKeys:
+        - fields: [paper_short_uid, author_short_uid]
+          reference:
+            resource: authorships
+            fields: [paper_short_uid, author_short_uid]
+        - fields: institution_short_uid
+          reference:
+            resource: institutions
+            fields: short_uid
+      missingValues: [""]
+  - name: paper_relationships
+    path: paper_relationships.csv
+    title: Paper Relationships
+    description: >
+      Defines the relationships between papers, such as citations (directed) and
+      similarity (undirected) links.
+    format: csv
+    profile: tabular-data-resource
+    schema:
+      fields:
+        - name: source_short_uid
+          type: string
+          description: The unique ID of the source paper in the relationship (e.g., the paper doing the citing).
+        - name: target_short_uid
+          type: string
+          description: The unique ID of the target paper in the relationship (e.g., the paper being cited).
+        - name: relationship_type
+          type: string
+          description: >
+            The type of relationship. 'cites' means the source paper cites the target paper.
+            'similar' means the papers are related by content.
+          constraints:
+            enum: ["cites", "similar"]
+      primaryKey: [source_short_uid, target_short_uid, relationship_type]
+      foreignKeys:
+        - fields: source_short_uid
+          reference:
+            resource: papers
+            fields: short_uid
+        - fields: target_short_uid
+          reference:
+            resource: papers
+            fields: short_uid
+      missingValues: [""]
+  - name: paper_relationship_types
+    path: paper_relationship_types.csv
+    title: Paper Relationship Types
+    description: >
+      Indicates the types of relationships a given paper is involved in, such as citations or similarity.
+    format: csv
+    profile: tabular-data-resource
+    schema:
+      fields:
+        - name: paper_short_uid
+          type: string
+          description: Foreign key to the papers table.
+        - name: relationship_type
+          type: string
+          description: The type of relationship (e.g., 'cites', 'similar').
+      primaryKey: [paper_short_uid, relationship_type]
+      missingValues: [""]
