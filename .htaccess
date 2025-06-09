@@ -4,11 +4,7 @@ Options -Indexes
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteBase /app/
-
-  # Serve existing files/directories as-is
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d
-
-  # Redirect all else to index.html for SPA
   RewriteRule ^ index.html [L]
 </IfModule>
