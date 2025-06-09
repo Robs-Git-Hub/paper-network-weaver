@@ -1,0 +1,8 @@
+nodejs:
+  version: '16'
+
+deployment:
+  tasks:
+    - npm install
+    - npm run build
+    - cp -r build/* ./
