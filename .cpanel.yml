@@ -1,8 +1,16 @@
+---
+# Use Node.js 16 on the server
 nodejs:
   version: '16'
 
+# Tell cPanel how to build and publish your React app
 deployment:
   tasks:
+    # 1. Install dependencies
     - npm install
+
+    # 2. Build into the `build/` folder
     - npm run build
-    - cp -r build/* ./
+
+    # 3. Copy the built static files into the current directory
+    - cp -R build/* ./
