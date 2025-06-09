@@ -3,3 +3,4 @@ deployment:
   tasks:
     - rm -rf /home/acesiten/public_html/app/*
     - cp -R dist/* /home/acesiten/public_html/app/
+    - cp .htaccess /home/acesiten/public_html/app/.htaccess
