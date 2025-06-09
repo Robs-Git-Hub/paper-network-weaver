@@ -1,10 +1,5 @@
 ---
-nodejs:
-  version: '18'
-
 deployment:
   tasks:
-    - npm install
-    - npm run build
     - rm -rf /home/acesiten/public_html/app/*
     - cp -R dist/* /home/acesiten/public_html/app/
