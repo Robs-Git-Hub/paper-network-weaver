@@ -1,7 +1,8 @@
 
 // Main worker message handling
 import { processOpenAlexPaper } from './entity-processors';
-import { fetchFirstDegreeCitations, fetchSecondDegreeCitations, hydrateStubPapers, hydrateMasterPaper } from './relationship-builder';
+import { fetchSecondDegreeCitations, hydrateStubPapers, hydrateMasterPaper } from './relationship-builder';
+import { fetchAllCitations } from './citation-fetch';
 import { enrichMasterPaperWithSemanticScholar } from './semantic-scholar';
 import { performAuthorReconciliation } from './author-reconciliation';
 import { getUtilityFunctions } from './utils';
@@ -41,7 +42,26 @@ export function setupWorkerMessageHandler() {
             console.log('[Worker] Phase A, Step 1: Master Paper processed.');
             
             if (payload.paper.id) {
-              await fetchFirstDegreeCitations(payload.paper.id, getState(), utils);
+              // Use the new batched citation fetching
+              console.log('[Worker] Phase A, Step 2: Fetching citations with batching.');
+              const citationsResponse = await fetchAllCitations(payload.paper.id);
+              
+              // Process the citations into the graph
+              for (const citingPaper of citationsResponse.results) {
+                await processOpenAlexPaper(
+                  citingPaper,
+                  true,
+                  state.papers,
+                  state.authors,
+                  state.institutions,
+                  state.authorships,
+                  state.externalIdIndex,
+                  utils.addToExternalIndex,
+                  utils.findByExternalId
+                );
+              }
+              console.log('[Worker] Phase A, Step 2: Citations processed.');
+              
               await enrichMasterPaperWithSemanticScholar(
                 state.papers,
                 state.externalIdIndex,
