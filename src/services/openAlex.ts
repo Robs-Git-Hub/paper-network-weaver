@@ -1,4 +1,5 @@
 import { fetchWithRetry } from '../utils/api-helpers';
+import { normalizeOpenAlexId } from './openAlex-util';
 
 // Corrected and more complete type definitions based on project docs and API usage.
 interface OpenAlexPaper {
@@ -88,7 +89,7 @@ export class OpenAlexService {
   }
 
   async fetchCitations(openAlexId: string): Promise<OpenAlexSearchResponse> {
-    const workId = openAlexId.replace('https://openalex.org/', '');
+    const workId = normalizeOpenAlexId(openAlexId);
     const url = `${this.baseUrl}/works?filter=cites:${workId}&per_page=200&select=id,ids,doi,title,publication_year,publication_date,type,authorships,fwci,cited_by_count,abstract_inverted_index,primary_location,best_oa_location,open_access,keywords,referenced_works,related_works,language`;
     
     const response = await fetchWithRetry(url);
@@ -102,7 +103,7 @@ export class OpenAlexService {
   }
 
   async fetchPaperDetails(openAlexId: string): Promise<OpenAlexPaper | null> {
-    const workId = openAlexId.replace('https://openalex.org/', '');
+    const workId = normalizeOpenAlexId(openAlexId);
     const url = `${this.baseUrl}/works/${workId}?select=id,ids,doi,title,publication_year,publication_date,type,language,authorships,primary_location,fwci,cited_by_count,abstract_inverted_index,best_oa_location,open_access,keywords,referenced_works,related_works`;
     
     const response = await fetchWithRetry(url);
@@ -116,8 +117,9 @@ export class OpenAlexService {
   }
 
   async fetchMultiplePapers(workIds: string[]): Promise<OpenAlexSearchResponse> {
-    // prefix “openalex:” once, then join bare IDs
-    const filterParam = `openalex:${workIds.join('|')}`;
+    // Clean all IDs and prefix "openalex:" once, then join bare IDs
+    const cleanIds = workIds.map(normalizeOpenAlexId);
+    const filterParam = `openalex:${cleanIds.join('|')}`;
     const url = `${this.baseUrl}/works?filter=${filterParam}` +
       `&select=id,ids,doi,title,publication_year,publication_date,type,language,` +
       `authorships,primary_location,fwci,cited_by_count,abstract_inverted_index,` +

@@ -1,5 +1,6 @@
 
 import { openAlexService } from '../../services/openAlex';
+import { normalizeOpenAlexId } from '../../services/openAlex-util';
 
 const BATCH_SIZE = 20;
 
@@ -18,7 +19,8 @@ export async function fetchFirstDegreeCitations(openAlexId: string) {
 
 export async function fetchSecondDegreeCitations(citingPaperIds: string[]) {
   console.log(`[Citation Fetch] Fetching second-degree citations for ${citingPaperIds.length} papers`);
-  const idChunks = chunkArray(citingPaperIds, BATCH_SIZE);
+  const cleanIds = citingPaperIds.map(normalizeOpenAlexId);
+  const idChunks = chunkArray(cleanIds, BATCH_SIZE);
   const detailedResults = [];
 
   for (const chunk of idChunks) {
@@ -36,7 +38,7 @@ export async function fetchSecondDegreeCitations(citingPaperIds: string[]) {
 export async function fetchAllCitations(openAlexId: string) {
   console.log(`[Citation Fetch] Fetching all citations with batching for ${openAlexId}`);
   const firstDegree = await openAlexService.fetchCitations(openAlexId);
-  const citingIds = firstDegree.results.map(p => p.id.replace('https://openalex.org/', ''));
+  const citingIds = firstDegree.results.map(p => normalizeOpenAlexId(p.id));
   
   if (citingIds.length === 0) {
     return firstDegree;
