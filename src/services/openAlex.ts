@@ -1,4 +1,3 @@
-
 import { fetchWithRetry } from '../utils/api-helpers';
 
 // Corrected and more complete type definitions based on project docs and API usage.
@@ -112,6 +111,23 @@ export class OpenAlexService {
     }
     if (!response.ok) {
       throw new Error(`OpenAlex paper details API error: ${response.status} ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  async fetchMultiplePapers(workIds: string[]): Promise<OpenAlexSearchResponse> {
+    const filterParam = workIds.map(id => `openalex:${id}`).join('|');
+    const url = `${this.baseUrl}/works?filter=${filterParam}` +
+      `&select=id,ids,doi,title,publication_year,publication_date,type,language,` +
+      `authorships,primary_location,fwci,cited_by_count,abstract_inverted_index,` +
+      `best_oa_location,open_access,keywords,referenced_works,related_works`;
+    
+    const response = await fetchWithRetry(url);
+    if (response.status === 404) {
+      return { results: [], meta: { count: 0, db_response_time_ms: 0, page: 1, per_page: workIds.length } };
+    }
+    if (!response.ok) {
+      throw new Error(`OpenAlex batch fetch error: ${response.status} ${response.statusText}`);
     }
     return response.json();
   }
