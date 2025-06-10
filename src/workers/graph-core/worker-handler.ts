@@ -1,8 +1,7 @@
 
 // Main worker message handling
 import { processOpenAlexPaper } from './entity-processors';
-import { fetchSecondDegreeCitations, hydrateStubPapers, hydrateMasterPaper } from './relationship-builder';
-import { fetchAllCitations } from './citation-fetch';
+import { fetchFirstDegreeCitations, fetchSecondDegreeCitations, hydrateStubPapers, hydrateMasterPaper } from './relationship-builder';
 import { enrichMasterPaperWithSemanticScholar } from './semantic-scholar';
 import { performAuthorReconciliation } from './author-reconciliation';
 import { getUtilityFunctions } from './utils';
@@ -42,25 +41,9 @@ export function setupWorkerMessageHandler() {
             console.log('[Worker] Phase A, Step 1: Master Paper processed.');
             
             if (payload.paper.id) {
-              // Use the new batched citation fetching
-              console.log('[Worker] Phase A, Step 2: Fetching citations with batching.');
-              const citationsResponse = await fetchAllCitations(payload.paper.id);
-              
-              // Process the citations into the graph
-              for (const citingPaper of citationsResponse.results) {
-                await processOpenAlexPaper(
-                  citingPaper,
-                  true,
-                  state.papers,
-                  state.authors,
-                  state.institutions,
-                  state.authorships,
-                  state.externalIdIndex,
-                  utils.addToExternalIndex,
-                  utils.findByExternalId
-                );
-              }
-              console.log('[Worker] Phase A, Step 2: Citations processed.');
+              console.log('[Worker] Phase A, Step 2: Fetching and recording 1st-degree citations.');
+              // use our relationship-builder which both fetches AND pushes paperRelationships
+              await fetchFirstDegreeCitations(payload.paper.id, state, utils);              
               
               await enrichMasterPaperWithSemanticScholar(
                 state.papers,
