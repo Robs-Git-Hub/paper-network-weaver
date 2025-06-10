@@ -116,7 +116,8 @@ export class OpenAlexService {
   }
 
   async fetchMultiplePapers(workIds: string[]): Promise<OpenAlexSearchResponse> {
-    const filterParam = workIds.map(id => `openalex:${id}`).join('|');
+    // prefix “openalex:” once, then join bare IDs
+    const filterParam = `openalex:${workIds.join('|')}`;
     const url = `${this.baseUrl}/works?filter=${filterParam}` +
       `&select=id,ids,doi,title,publication_year,publication_date,type,language,` +
       `authorships,primary_location,fwci,cited_by_count,abstract_inverted_index,` +
