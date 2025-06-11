@@ -19,9 +19,10 @@ export interface OpenAlexPaper {
     author_position?: string;
     author?: {
       id?: string;
-      display_name?: string;
+      display_name: string; // Make this required to match PaperResult expectations
       orcid?: string;
     };
+    raw_author_name?: string; // Add this missing property
     institutions?: Array<{
       id?: string;
       display_name?: string;
@@ -46,8 +47,12 @@ export interface OpenAlexPaper {
   open_access?: {
     is_oa?: boolean;
     oa_date?: string;
+    oa_url?: string; // Add missing property
+    oa_status?: string; // Add missing property
   };
   keywords?: Array<{
+    id: string; // Add missing property to match KeywordObject
+    display_name: string; // Add missing property to match KeywordObject
     keyword?: string;
     score?: number;
   }>;
