@@ -1,4 +1,6 @@
 
+// src/workers/graph-core/types.ts
+
 // Shared types for the graph worker modules
 
 export interface Paper {
@@ -121,4 +123,10 @@ export interface GraphState {
   externalIdIndex: Record<string, string>;
   masterPaperUid: string | null;
   stubCreationThreshold: number;
+}
+
+export interface UtilityFunctions {
+  postMessage: (type: string, payload: any) => void;
+  addToExternalIndex: (idType: string, idValue: string, entityUid: string) => void;
+  findByExternalId: (idType: string, idValue: string) => string | null;
 }

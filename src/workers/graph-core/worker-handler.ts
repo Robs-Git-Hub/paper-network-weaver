@@ -1,10 +1,11 @@
 
-// Main worker message handling
+// src/workers/graph-core/worker-handler.ts
+
 import { processOpenAlexPaper } from './entity-processors';
 import { fetchFirstDegreeCitations, fetchSecondDegreeCitations, hydrateStubPapers, hydrateMasterPaper } from './relationship-builder';
 import { enrichMasterPaperWithSemanticScholar } from './semantic-scholar';
 import { performAuthorReconciliation } from './author-reconciliation';
-import { getUtilityFunctions, addToExternalIndex } from './utils';
+import { getUtilityFunctions } from './utils';
 import { getState, resetState, setMasterPaperUid, setStubCreationThreshold, setState } from './state';
 import { normalizeOpenAlexId } from '../../services/openAlex-util';
 import type { WorkerMessage } from './types';
@@ -33,7 +34,6 @@ export function setupWorkerMessageHandler() {
               id: normalizeOpenAlexId(payload.paper.id)
             };
             
-            // Get state just-in-time for this function call
             const initialState = getState();
             const masterUid = await processOpenAlexPaper(
               cleanMasterPaper, 
@@ -47,14 +47,9 @@ export function setupWorkerMessageHandler() {
             console.log('[Worker] Phase A, Step 1: Master Paper processed.');
             
             if (cleanMasterPaper.id) {
-              // --- FIX: Pass the getState function itself, not a stale state object ---
               await fetchFirstDegreeCitations(cleanMasterPaper.id, getState, utils);              
               
-              await enrichMasterPaperWithSemanticScholar(
-                getState,
-                addToExternalIndex,
-                () => utils
-              );
+              await enrichMasterPaperWithSemanticScholar(getState, utils);
             }
             
             console.log('--- [Worker] Phase A Complete. Posting initial graph to main thread. ---');
@@ -74,13 +69,8 @@ export function setupWorkerMessageHandler() {
             console.log('--- [Worker] Starting Phase B: Background Enrichment. ---');
             utils.postMessage('app_status/update', { state: 'enriching', message: null });
             
-            // --- FIX: Pass getState to all async phase B functions ---
             await hydrateMasterPaper(getState, utils);
-            await performAuthorReconciliation(
-              getState,
-              addToExternalIndex,
-              utils.postMessage
-            );
+            await performAuthorReconciliation(getState, utils);
             
             console.log('--- [Worker] Phase B Complete. All enrichment finished. ---');
             utils.postMessage('enrichment/complete', { status: 'success' });
@@ -122,7 +112,6 @@ export function setupWorkerMessageHandler() {
             
             utils.postMessage('app_status/update', { state: 'extending', message: 'Extending network...' });
             
-            // --- FIX: Pass getState to all async phase C functions ---
             await fetchSecondDegreeCitations(getState, utils);
             await hydrateStubPapers(getState, utils);
 

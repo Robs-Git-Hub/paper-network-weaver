@@ -1,17 +1,14 @@
 
-// Semantic Scholar integration
+// src/workers/graph-core/semantic-scholar.ts
+
 import { semanticScholarService } from '../../services/semanticScholar';
 import { processSemanticScholarRelationships } from './relationship-builder';
-import type { Paper, GraphState } from './types'; // Added GraphState import
+import type { Paper, GraphState, UtilityFunctions } from './types';
 
-// --- REFACTORED SIGNATURE ---
-// This function now accepts getState directly, making it robust and self-sufficient.
 export async function enrichMasterPaperWithSemanticScholar(
   getGraphState: () => GraphState,
-  addToExternalIndex: (idType: string, idValue: string, entityUid: string) => void,
-  getUtilityFunctions: () => any
+  utils: UtilityFunctions
 ) {
-  // --- FIX: Get fresh state at the beginning of execution ---
   const state = getGraphState();
   const { papers, externalIdIndex, masterPaperUid } = state;
 
@@ -35,7 +32,6 @@ export async function enrichMasterPaperWithSemanticScholar(
     const ssData = await semanticScholarService.fetchPaperDetails(doi);
     if (!ssData) return;
     
-    // Get a fresh reference to the master paper before updating
     const currentMasterPaper = getGraphState().papers[masterPaperUid];
     
     const updates: Partial<Paper> = {};
@@ -44,19 +40,17 @@ export async function enrichMasterPaperWithSemanticScholar(
     }
     
     if (Object.keys(updates).length > 0) {
-      // Mutate the state directly using the fresh reference
       getGraphState().papers[masterPaperUid] = { ...currentMasterPaper, ...updates };
     }
     
     if (ssData.paperId) {
-      addToExternalIndex('ss', ssData.paperId, masterPaperUid);
+      utils.addToExternalIndex('ss', ssData.paperId, masterPaperUid);
     }
     if (ssData.corpusId) {
-      addToExternalIndex('corpusId', ssData.corpusId.toString(), masterPaperUid);
+      utils.addToExternalIndex('corpusId', ssData.corpusId.toString(), masterPaperUid);
     }
     
-    // --- FIX: Pass the getState function, not a stale state object ---
-    await processSemanticScholarRelationships(ssData, getGraphState, getUtilityFunctions());
+    await processSemanticScholarRelationships(ssData, getGraphState, utils);
     
   } catch (error) {
     console.warn('[Worker] Semantic Scholar enrichment failed:', error);

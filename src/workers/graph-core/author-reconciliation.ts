@@ -1,25 +1,24 @@
 
-// Author reconciliation and merging
-import { openAlexService } from '../../services/openAlex'; // ADD THIS IMPORT
+// src/workers/graph-core/author-reconciliation.ts
+
+import { openAlexService } from '../../services/openAlex';
 import { calculateMatchScore } from '../../utils/data-transformers';
-import type { Author, Paper, Authorship } from './types';
+import type { Author, Paper, Authorship, GraphState, UtilityFunctions } from './types';
 
 export async function performAuthorReconciliation(
-  papers: Record<string, Paper>,
-  authors: Record<string, Author>,
-  authorships: Record<string, Authorship>,
-  externalIdIndex: Record<string, string>,
-  addToExternalIndex: (idType: string, idValue: string, entityUid: string) => void,
-  postMessage: (type: string, payload: any) => void
+  getGraphState: () => GraphState,
+  utils: UtilityFunctions
 ) {
   console.log('[Worker] Phase B, Steps 5 & 6: Starting Author Reconciliation.');
-  postMessage('progress/update', { message: 'Reconciling authors...' });
+  utils.postMessage('progress/update', { message: 'Reconciling authors...' });
+  
+  const { papers, authors, authorships, externalIdIndex } = getGraphState();
   
   const stubAuthors = Object.values(authors).filter(author => author.is_stub);
   
   if (stubAuthors.length === 0) {
     console.log('[Worker] Phase B, Steps 5 & 6: No stub authors to reconcile. Finishing enrichment.');
-    postMessage('app_status/update', { state: 'active', message: null });
+    utils.postMessage('app_status/update', { state: 'active', message: null });
     return;
   }
   
@@ -54,7 +53,7 @@ export async function performAuthorReconciliation(
   
   if (reconciliationMap.size === 0) {
     console.log('[Worker] Phase B, Steps 5 & 6: No DOIs found for stub authors. Finishing enrichment.');
-    postMessage('app_status/update', { state: 'active', message: null });
+    utils.postMessage('app_status/update', { state: 'active', message: null });
     return;
   }
   
@@ -67,14 +66,12 @@ export async function performAuthorReconciliation(
   }> = [];
   
   try {
-    // REFACTORED BLOCK: Use the OpenAlexService instead of a manual fetch.
     const openAlexResponse = await openAlexService.fetchMultiplePapers(
       dois, 
       'AUTHOR_RECONCILIATION'
     );
     
     for (const paperData of openAlexResponse.results) {
-      // The service normalizes DOIs, but we ensure it here for map lookup consistency.
       const paperDoi = paperData.doi?.replace('https://doi.org/', '') || '';
       if (!paperDoi || !reconciliationMap.has(paperDoi)) continue;
       
@@ -138,10 +135,10 @@ export async function performAuthorReconciliation(
         }
       });
       
-      addToExternalIndex('openalex_author', openAlexId, plan.winnerUid);
+      utils.addToExternalIndex('openalex_author', openAlexId, plan.winnerUid);
       
       for (const loserUid of plan.loserUids) {
-        const loserAuthorships = Object.entries(authorships).filter(
+        const loserAuthorships = Object.entries(getGraphState().authorships).filter(
           ([_, auth]) => auth.author_short_uid === loserUid
         );
         
@@ -158,7 +155,7 @@ export async function performAuthorReconciliation(
       }
     }
     
-    postMessage('graph/applyAuthorMerge', {
+    utils.postMessage('graph/applyAuthorMerge', {
       updates: {
         authors: authorUpdates,
         authorships: authorshipUpdates
@@ -173,5 +170,5 @@ export async function performAuthorReconciliation(
     console.log('[Worker] Phase B, Steps 5 & 6: No high-confidence author matches found.');
   }
   
-  postMessage('app_status/update', { state: 'active', message: null });
+  utils.postMessage('app_status/update', { state: 'active', message: null });
 }
