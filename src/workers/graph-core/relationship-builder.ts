@@ -112,6 +112,10 @@ export async function fetchSecondDegreeCitations(
   state: GraphState,
   utils: UtilityFunctions
 ) {
+  // --- HYPOTHESIS TEST LOG ---
+  console.log('[Hypothesis-Test | Builder] Function received state with masterPaperUid:', state.masterPaperUid);
+  // --- END TEST LOG ---
+
   console.log('[Worker] Phase C, Step 8: Fetching 2nd degree citations.');
   utils.postMessage('progress/update', { message: 'Fetching 2nd degree citations...' });
 

@@ -46,6 +46,11 @@ export function setupWorkerMessageHandler() {
             console.log('[Worker] Phase A, Step 1: Master Paper processed.');
             
             if (cleanMasterPaper.id) {
+              // --- HYPOTHESIS TEST LOGS ---
+              console.log('[Hypothesis-Test | Handler] The `state` object we are about to pass has masterPaperUid:', state.masterPaperUid);
+              console.log('[Hypothesis-Test | Handler] A fresh call to getState() NOW has masterPaperUid:', getState().masterPaperUid);
+              // --- END TEST LOGS ---
+
               await fetchFirstDegreeCitations(cleanMasterPaper.id, state, utils);              
               
               await enrichMasterPaperWithSemanticScholar(
