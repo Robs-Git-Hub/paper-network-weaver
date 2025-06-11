@@ -25,15 +25,15 @@ export function resetState() {
   stubCreationThreshold = 3;
 }
 
-// *** ADDED THIS ENTIRE FUNCTION ***
-// This function re-hydrates the worker's state from the main thread's authoritative state.
+// This function now expects a state object that is already in the worker's
+// internal camelCase format. The translation happens *before* this is called.
 export function setState(newState: {
   papers: Record<string, Paper>;
   authors: Record<string, Author>;
   institutions: Record<string, Institution>;
   authorships: Record<string, Authorship>;
-  paper_relationships: PaperRelationship[];
-  external_id_index: Record<string, string>;
+  paperRelationships: PaperRelationship[];
+  externalIdIndex: Record<string, string>;
   masterPaperUid: string | null;
   stubCreationThreshold: number;
 }) {
@@ -41,8 +41,8 @@ export function setState(newState: {
   authors = newState.authors;
   institutions = newState.institutions;
   authorships = newState.authorships;
-  paperRelationships = newState.paper_relationships; // Note the mapping from snake_case to camelCase
-  externalIdIndex = newState.external_id_index;     // Note the mapping from snake_case to camelCase
+  paperRelationships = newState.paperRelationships;
+  externalIdIndex = newState.externalIdIndex;
   masterPaperUid = newState.masterPaperUid;
   stubCreationThreshold = newState.stubCreationThreshold;
 }

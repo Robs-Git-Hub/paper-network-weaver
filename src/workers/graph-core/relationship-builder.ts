@@ -219,6 +219,7 @@ export async function fetchSecondDegreeCitations(
     state.paperRelationships.push(...newRelationships);
     
     if (Object.keys(newPapers).length > 0) {
+      // Note: When posting a message, we translate to the main thread's snake_case convention.
       utils.postMessage('graph/addNodes', {
         data: {
           papers: newPapers,

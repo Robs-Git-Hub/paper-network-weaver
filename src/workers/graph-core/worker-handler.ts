@@ -5,7 +5,7 @@ import { fetchFirstDegreeCitations, fetchSecondDegreeCitations, hydrateStubPaper
 import { enrichMasterPaperWithSemanticScholar } from './semantic-scholar';
 import { performAuthorReconciliation } from './author-reconciliation';
 import { getUtilityFunctions, addToExternalIndex } from './utils';
-import { getState, resetState, setMasterPaperUid, setStubCreationThreshold, setState } from './state'; // <-- IMPORT setState
+import { getState, resetState, setMasterPaperUid, setStubCreationThreshold, setState } from './state';
 import { normalizeOpenAlexId } from '../../services/openAlex-util';
 import type { WorkerMessage } from './types';
 
@@ -59,6 +59,7 @@ export function setupWorkerMessageHandler() {
             }
             
             console.log('--- [Worker] Phase A Complete. Posting initial graph to main thread. ---');
+            // Translate worker's camelCase to main thread's snake_case for posting
             utils.postMessage('graph/setState', {
               data: {
                 papers: state.papers,
@@ -101,23 +102,23 @@ export function setupWorkerMessageHandler() {
         
         (async () => {
           try {
-            // Before executing, synchronize the worker's state with the authoritative state from the main thread.
             if (payload) {
-              console.log('[Worker] Synchronizing state from main thread.');
+              console.log('[Worker] Synchronizing and translating state from main thread.');
               const currentState = getState();
               
-              // Explicitly map properties from the main thread's snake_case
-              // to the worker's internal camelCase state structure.
-              setState({
+              // Translate main thread's snake_case payload to worker's camelCase state
+              const translatedState = {
                 papers: payload.papers,
                 authors: payload.authors,
                 institutions: payload.institutions,
                 authorships: payload.authorships,
-                paperRelationships: payload.paper_relationships, // FIX: Map snake_case to camelCase
-                externalIdIndex: payload.external_id_index,     // FIX: Map snake_case to camelCase
+                paperRelationships: payload.paper_relationships,
+                externalIdIndex: payload.external_id_index,
                 masterPaperUid: currentState.masterPaperUid,
                 stubCreationThreshold: currentState.stubCreationThreshold
-              });
+              };
+
+              setState(translatedState);
             }
 
             const state = getState();
