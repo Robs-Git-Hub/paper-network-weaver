@@ -7,7 +7,7 @@ import type { OpenAlexPaper, OpenAlexSearchResponse } from '../workers/graph-cor
 
 const OPENALEX_API_BATCH_SIZE = 50;
 
-// Utility function to chunk arrays, can be defined inside or outside the class
+// Utility function to chunk arrays
 function chunkArray<T>(array: T[], chunkSize: number): T[][] {
   const chunks: T[][] = [];
   for (let i = 0; i < array.length; i += chunkSize) {
@@ -50,6 +50,32 @@ export class OpenAlexService {
     return url;
   }
 
+  // --- NEW HELPER FOR PAGINATION ---
+  private async fetchAllPages(initialUrl: string): Promise<OpenAlexPaper[]> {
+    let allResults: OpenAlexPaper[] = [];
+    let nextCursor: string | null = '*'; // Use '*' for the first request
+    let currentUrl = initialUrl;
+
+    while (nextCursor) {
+      const urlWithCursor = `${currentUrl}&cursor=${nextCursor}`;
+      const response = await fetchWithRetry(urlWithCursor);
+
+      if (!response.ok) {
+        console.warn(`[Worker] A page failed during pagination for ${currentUrl}: ${response.status}`);
+        break; // Exit loop on page failure
+      }
+
+      const data: OpenAlexSearchResponse = await response.json();
+      if (data.results) {
+        allResults.push(...data.results);
+      }
+      
+      nextCursor = data.meta.next_cursor;
+    }
+
+    return allResults;
+  }
+
   async searchPapers(query: string): Promise<OpenAlexSearchResponse> {
     const encodedQuery = encodeURIComponent(query);
     const filter = `title.search:${encodedQuery}`;
@@ -60,17 +86,21 @@ export class OpenAlexService {
     return response.json();
   }
 
+  // --- REFACTORED FOR PAGINATION ---
   async fetchCitations(openAlexId: string): Promise<OpenAlexSearchResponse> {
     const workId = normalizeOpenAlexId(openAlexId);
     const filter = `cites:${workId}`;
-    const url = this.buildOpenAlexUrl(filter, 'FULL_INGESTION', 200);
+    const initialUrl = this.buildOpenAlexUrl(filter, 'FULL_INGESTION', 200);
     
-    const response = await fetchWithRetry(url);
-    if (!response.ok) throw new Error(`OpenAlex citations API error: ${response.status}`);
-    return response.json();
+    const allResults = await this.fetchAllPages(initialUrl);
+
+    return {
+      results: allResults,
+      meta: { count: allResults.length, db_response_time_ms: 0, page: 1, per_page: allResults.length },
+    };
   }
 
-  // --- REFACTORED FUNCTION ---
+  // --- REFACTORED FOR BATCHING & PAGINATION ---
   async fetchCitationsForMultiplePapers(workIds: string[]): Promise<OpenAlexSearchResponse> {
     const normalizedIds = workIds.map(normalizeOpenAlexId);
     if (normalizedIds.length === 0) {
@@ -81,20 +111,12 @@ export class OpenAlexService {
 
     const promises = idChunks.map(chunk => {
       const filter = `cites:${chunk.join('|')}`;
-      const url = this.buildOpenAlexUrl(filter, 'FULL_INGESTION', 200);
-      return fetchWithRetry(url);
+      const initialUrl = this.buildOpenAlexUrl(filter, 'FULL_INGESTION', 200);
+      return this.fetchAllPages(initialUrl); // Use the pagination helper for each chunk
     });
 
-    const responses = await Promise.all(promises);
-    const allResults: OpenAlexPaper[] = [];
-    for (const response of responses) {
-      if (response.ok) {
-        const data: OpenAlexSearchResponse = await response.json();
-        if (data.results) allResults.push(...data.results);
-      } else {
-        console.warn(`[Worker] A chunk failed during fetchCitationsForMultiplePapers: ${response.status}`);
-      }
-    }
+    const resultsFromAllChunks = await Promise.all(promises);
+    const allResults = resultsFromAllChunks.flat();
 
     return {
       results: allResults,
@@ -125,22 +147,13 @@ export class OpenAlexService {
     const idChunks = chunkArray(normalizedIds, OPENALEX_API_BATCH_SIZE);
 
     const promises = idChunks.map(chunk => {
-      // Note: The filter key is 'openalex' here, not 'cites'. This is correct.
       const filter = `openalex:${chunk.join('|')}`;
-      const url = this.buildOpenAlexUrl(filter, fieldSetName);
-      return fetchWithRetry(url);
+      const initialUrl = this.buildOpenAlexUrl(filter, fieldSetName, 200);
+      return this.fetchAllPages(initialUrl);
     });
 
-    const responses = await Promise.all(promises);
-    const allResults: OpenAlexPaper[] = [];
-    for (const response of responses) {
-      if (response.ok) {
-        const data: OpenAlexSearchResponse = await response.json();
-        if (data.results) allResults.push(...data.results);
-      } else {
-        console.error(`OpenAlex batch fetch chunk error: ${response.status} ${response.statusText}`);
-      }
-    }
+    const resultsFromAllChunks = await Promise.all(promises);
+    const allResults = resultsFromAllChunks.flat();
 
     return {
       results: allResults,
