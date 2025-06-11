@@ -66,7 +66,9 @@ export async function performAuthorReconciliation(
   }> = [];
   
   try {
-    const openAlexResponse = await openAlexService.fetchMultiplePapers(
+    // --- THIS IS THE FIX ---
+    // We are now calling the new, dedicated function for fetching by DOI.
+    const openAlexResponse = await openAlexService.fetchMultiplePapersByDoi(
       dois, 
       'AUTHOR_RECONCILIATION'
     );
