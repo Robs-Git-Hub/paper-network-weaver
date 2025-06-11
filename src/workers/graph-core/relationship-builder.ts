@@ -1,7 +1,7 @@
-
 import { semanticScholarService } from '../../services/semanticScholar';
 import { fetchWithRetry } from '../../utils/api-helpers';
 import { reconstructAbstract, extractKeywords, normalizeDoi, calculateMatchScore, generateShortUid } from '../../utils/data-transformers';
+import { normalizeOpenAlexId } from '../../services/openAlex-util';
 import { processOpenAlexPaper, processOpenAlexAuthor, processOpenAlexInstitution } from './entity-processors';
 import type { Paper, Author, Institution, Authorship, PaperRelationship } from './types';
 
@@ -29,11 +29,6 @@ export async function fetchFirstDegreeCitations(
 ) {
   console.log('[Worker] Phase A, Step 2: Fetching 1st degree citations from OpenAlex.');
   utils.postMessage('progress/update', { message: 'Fetching 1st degree citations...' });
-
-  const normalizeOpenAlexId = (id: string): string => {
-    if (!id) return '';
-    return id.replace('https://openalex.org/', '');
-  };
   
   const normalizedMasterId = normalizeOpenAlexId(masterPaperOpenAlexId);
 
