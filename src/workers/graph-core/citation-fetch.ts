@@ -24,7 +24,8 @@ export async function fetchSecondDegreeCitations(citingPaperIds: string[]) {
 export async function fetchAllCitations(openAlexId: string) {
   console.log(`[Citation Fetch] Fetching all citations with batching for ${openAlexId}`);
   const firstDegree = await openAlexService.fetchCitations(openAlexId);
-  const citingIds = firstDegree.results.map(p => normalizeOpenAlexId(p.id));
+  // Simply extract the IDs. The service will handle normalization.
+  const citingIds = firstDegree.results.map(p => p.id);
   
   if (citingIds.length === 0) {
     return firstDegree;
