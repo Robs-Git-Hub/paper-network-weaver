@@ -56,8 +56,6 @@ export interface WorkerMessage {
   payload: any;
 }
 
-// --- START: ADDED MISSING OPENALEX TYPES ---
-
 export interface OpenAlexPaper {
   id: string;
   ids?: Record<string, string>;
@@ -114,4 +112,13 @@ export interface OpenAlexSearchResponse {
   };
 }
 
-// --- END: ADDED MISSING OPENALEX TYPES ---
+export interface GraphState {
+  papers: Record<string, Paper>;
+  authors: Record<string, Author>;
+  institutions: Record<string, Institution>;
+  authorships: Record<string, Authorship>;
+  paperRelationships: PaperRelationship[];
+  externalIdIndex: Record<string, string>;
+  masterPaperUid: string | null;
+  stubCreationThreshold: number;
+}

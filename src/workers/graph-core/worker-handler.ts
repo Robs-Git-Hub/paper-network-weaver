@@ -20,7 +20,6 @@ export function setupWorkerMessageHandler() {
             console.log("--- [Worker] Received 'graph/processMasterPaper'. Starting Phase A. ---");
             resetState();
             
-            const state = getState();
             const utils = getUtilityFunctions();
             
             setStubCreationThreshold(payload.stub_creation_threshold || 3);
@@ -34,64 +33,51 @@ export function setupWorkerMessageHandler() {
               id: normalizeOpenAlexId(payload.paper.id)
             };
             
+            // Get state just-in-time for this function call
+            const initialState = getState();
             const masterUid = await processOpenAlexPaper(
               cleanMasterPaper, 
               false, 
-              state.papers, 
-              state.authors, 
-              state.institutions, 
-              state.authorships
+              initialState.papers, 
+              initialState.authors, 
+              initialState.institutions, 
+              initialState.authorships
             );
             setMasterPaperUid(masterUid);
             console.log('[Worker] Phase A, Step 1: Master Paper processed.');
             
             if (cleanMasterPaper.id) {
-              // --- HYPOTHESIS TEST LOGS ---
-              console.log('[Hypothesis-Test | Handler] The `state` object we are about to pass has masterPaperUid:', state.masterPaperUid);
-              console.log('[Hypothesis-Test | Handler] A fresh call to getState() NOW has masterPaperUid:', getState().masterPaperUid);
-              // --- END TEST LOGS ---
-
-              await fetchFirstDegreeCitations(cleanMasterPaper.id, state, utils);              
+              // --- FIX: Pass the getState function itself, not a stale state object ---
+              await fetchFirstDegreeCitations(cleanMasterPaper.id, getState, utils);              
               
               await enrichMasterPaperWithSemanticScholar(
-                state.papers,
-                state.externalIdIndex,
-                state.masterPaperUid,
-                addToExternalIndex,
                 getState,
+                addToExternalIndex,
                 () => utils
               );
             }
             
             console.log('--- [Worker] Phase A Complete. Posting initial graph to main thread. ---');
             
-            // --- DEBUGGING LOG ADDED ---
-            console.log(
-              `[Worker-Trace | Step 1] PRE-POSTMESSAGE: state.paperRelationships has ${state.paperRelationships.length} items.`,
-              JSON.stringify(state.paperRelationships)
-            );
-            
-            // Translate worker's camelCase to main thread's snake_case for posting
+            const finalState = getState();
             utils.postMessage('graph/setState', {
               data: {
-                papers: state.papers,
-                authors: state.authors,
-                institutions: state.institutions,
-                authorships: state.authorships,
-                paper_relationships: state.paperRelationships,
-                external_id_index: state.externalIdIndex
+                papers: finalState.papers,
+                authors: finalState.authors,
+                institutions: finalState.institutions,
+                authorships: finalState.authorships,
+                paper_relationships: finalState.paperRelationships,
+                external_id_index: finalState.externalIdIndex
               }
             });
             
             console.log('--- [Worker] Starting Phase B: Background Enrichment. ---');
             utils.postMessage('app_status/update', { state: 'enriching', message: null });
             
-            await hydrateMasterPaper(state, utils);
+            // --- FIX: Pass getState to all async phase B functions ---
+            await hydrateMasterPaper(getState, utils);
             await performAuthorReconciliation(
-              state.papers,
-              state.authors,
-              state.authorships,
-              state.externalIdIndex,
+              getState,
               addToExternalIndex,
               utils.postMessage
             );
@@ -115,15 +101,9 @@ export function setupWorkerMessageHandler() {
         (async () => {
           try {
             if (payload) {
-              // --- DEBUGGING LOG ADDED ---
-              console.log(
-                `[Worker-Trace | Step 5] PHASE-C-RECEIVED: payload.paper_relationships has ${payload.paper_relationships.length} items.`
-              );
-
               console.log('[Worker] Synchronizing and translating state from main thread.');
               const currentState = getState();
               
-              // Translate main thread's snake_case payload to worker's camelCase state
               const translatedState = {
                 papers: payload.papers,
                 authors: payload.authors,
@@ -138,13 +118,13 @@ export function setupWorkerMessageHandler() {
               setState(translatedState);
             }
 
-            const state = getState();
             const utils = getUtilityFunctions();
             
             utils.postMessage('app_status/update', { state: 'extending', message: 'Extending network...' });
             
-            await fetchSecondDegreeCitations(state, utils);
-            await hydrateStubPapers(state, utils);
+            // --- FIX: Pass getState to all async phase C functions ---
+            await fetchSecondDegreeCitations(getState, utils);
+            await hydrateStubPapers(getState, utils);
 
             console.log('--- [Worker] Phase C Complete. Graph extension finished. ---');
             utils.postMessage('app_status/update', { state: 'active', message: null });

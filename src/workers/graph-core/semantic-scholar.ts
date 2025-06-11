@@ -2,16 +2,19 @@
 // Semantic Scholar integration
 import { semanticScholarService } from '../../services/semanticScholar';
 import { processSemanticScholarRelationships } from './relationship-builder';
-import type { Paper } from './types';
+import type { Paper, GraphState } from './types'; // Added GraphState import
 
+// --- REFACTORED SIGNATURE ---
+// This function now accepts getState directly, making it robust and self-sufficient.
 export async function enrichMasterPaperWithSemanticScholar(
-  papers: Record<string, Paper>,
-  externalIdIndex: Record<string, string>,
-  masterPaperUid: string | null,
+  getGraphState: () => GraphState,
   addToExternalIndex: (idType: string, idValue: string, entityUid: string) => void,
-  getGraphState: () => any,
   getUtilityFunctions: () => any
 ) {
+  // --- FIX: Get fresh state at the beginning of execution ---
+  const state = getGraphState();
+  const { papers, externalIdIndex, masterPaperUid } = state;
+
   if (!masterPaperUid) return;
   
   const masterPaper = papers[masterPaperUid];
@@ -32,13 +35,17 @@ export async function enrichMasterPaperWithSemanticScholar(
     const ssData = await semanticScholarService.fetchPaperDetails(doi);
     if (!ssData) return;
     
+    // Get a fresh reference to the master paper before updating
+    const currentMasterPaper = getGraphState().papers[masterPaperUid];
+    
     const updates: Partial<Paper> = {};
-    if (!masterPaper.best_oa_url && ssData.openAccessPdf?.url) {
+    if (!currentMasterPaper.best_oa_url && ssData.openAccessPdf?.url) {
       updates.best_oa_url = ssData.openAccessPdf.url;
     }
     
     if (Object.keys(updates).length > 0) {
-      papers[masterPaperUid] = { ...masterPaper, ...updates };
+      // Mutate the state directly using the fresh reference
+      getGraphState().papers[masterPaperUid] = { ...currentMasterPaper, ...updates };
     }
     
     if (ssData.paperId) {
@@ -48,7 +55,8 @@ export async function enrichMasterPaperWithSemanticScholar(
       addToExternalIndex('corpusId', ssData.corpusId.toString(), masterPaperUid);
     }
     
-    await processSemanticScholarRelationships(ssData, getGraphState(), getUtilityFunctions());
+    // --- FIX: Pass the getState function, not a stale state object ---
+    await processSemanticScholarRelationships(ssData, getGraphState, getUtilityFunctions());
     
   } catch (error) {
     console.warn('[Worker] Semantic Scholar enrichment failed:', error);
