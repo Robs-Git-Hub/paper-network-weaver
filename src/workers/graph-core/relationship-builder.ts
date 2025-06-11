@@ -125,18 +125,18 @@ export async function fetchSecondDegreeCitations(
     return;
   }
 
-  const openAlexIds = firstDegreeCitationUids.map(uid => {
+  const openAlexIdsOfFirstDegreePapers = firstDegreeCitationUids.map(uid => {
     const openAlexKey = Object.keys(state.externalIdIndex).find(key => key.startsWith('openalex:') && state.externalIdIndex[key] === uid);
     return openAlexKey ? openAlexKey.split(':')[1] : null;
   }).filter((id): id is string => id !== null);
 
-  if (openAlexIds.length === 0) {
+  if (openAlexIdsOfFirstDegreePapers.length === 0) {
     console.log('[Worker] No OpenAlex IDs found for 1st degree citations.');
     return;
   }
 
   try {
-    const data = await openAlexService.fetchCitationsForMultiplePapers(openAlexIds);
+    const data = await openAlexService.fetchCitationsForMultiplePapers(openAlexIdsOfFirstDegreePapers);
     console.log(`[Worker] Found ${data.results.length} 2nd degree citations.`);
     
     const newPapers: Record<string, Paper> = {};
@@ -147,25 +147,43 @@ export async function fetchSecondDegreeCitations(
     
     for (const paperData of data.results) {
       const cleanPaperData = { ...paperData, id: normalizeOpenAlexId(paperData.id) };
-
-      const existingUid = utils.findByExternalId('openalex', cleanPaperData.id);
-      if (existingUid) continue;
       
-      const paperUid = await processOpenAlexPaper(
-        cleanPaperData, false, state.papers, state.authors, state.institutions, 
-        state.authorships, state.externalIdIndex, utils.addToExternalIndex, utils.findByExternalId
-      );
+      // Determine the UID of the 2nd-degree paper, creating it if it doesn't exist.
+      let paperUid = utils.findByExternalId('openalex', cleanPaperData.id);
+      if (!paperUid) {
+        paperUid = await processOpenAlexPaper(
+          cleanPaperData, false, state.papers, state.authors, state.institutions, 
+          state.authorships, state.externalIdIndex, utils.addToExternalIndex, utils.findByExternalId
+        );
+        
+        // If it's a new paper, add its associated entities to the "new" collections for the UI update.
+        newPapers[paperUid] = state.papers[paperUid];
+        Object.entries(state.authorships).forEach(([key, authorship]) => {
+          if (authorship.paper_short_uid === paperUid) {
+            newAuthorships[key] = authorship;
+            if (state.authors[authorship.author_short_uid]) {
+              newAuthors[authorship.author_short_uid] = state.authors[authorship.author_short_uid];
+            }
+            authorship.institution_uids.forEach(instUid => {
+              if (state.institutions[instUid]) {
+                newInstitutions[instUid] = state.institutions[instUid];
+              }
+            });
+          }
+        });
+      }
       
+      // Tag the paper as a 2nd-degree citation if it's not already.
       if (state.papers[paperUid] && !state.papers[paperUid].relationship_tags.includes('2nd_degree')) {
         state.papers[paperUid].relationship_tags.push('2nd_degree');
       }
       
-      newPapers[paperUid] = state.papers[paperUid];
-      
+      // CRITICAL FIX: Create the relationship regardless of whether the paper was new or existing.
       (paperData.referenced_works || []).forEach(refWorkUrl => {
-        const cleanId = normalizeOpenAlexId(refWorkUrl);
-        if (openAlexIds.includes(cleanId)) {
-          const targetUid = utils.findByExternalId('openalex', cleanId);
+        const citedWorkId = normalizeOpenAlexId(refWorkUrl);
+        // Check if this 2nd-degree paper cites one of our 1st-degree papers.
+        if (openAlexIdsOfFirstDegreePapers.includes(citedWorkId)) {
+          const targetUid = utils.findByExternalId('openalex', citedWorkId);
           if (targetUid) {
             newRelationships.push({
               source_short_uid: paperUid,
@@ -174,23 +192,6 @@ export async function fetchSecondDegreeCitations(
             });
           }
         }
-      });
-      
-      Object.entries(state.authorships).forEach(([key, authorship]) => {
-        if (authorship.paper_short_uid === paperUid) {
-          newAuthorships[key] = authorship;
-          if (state.authors[authorship.author_short_uid]) {
-            newAuthors[authorship.author_short_uid] = state.authors[authorship.author_short_uid];
-          }
-        }
-      });
-      
-      Object.values(newAuthorships).forEach(authorship => {
-        authorship.institution_uids.forEach(instUid => {
-          if (state.institutions[instUid]) {
-            newInstitutions[instUid] = state.institutions[instUid];
-          }
-        });
       });
     }
     
@@ -208,7 +209,7 @@ export async function fetchSecondDegreeCitations(
       });
     }
     
-    console.log(`[Worker] Added ${Object.keys(newPapers).length} new 2nd degree citation papers.`);
+    console.log(`[Worker] Added ${Object.keys(newPapers).length} new 2nd degree citation papers and ${newRelationships.length} new relationships.`);
     
   } catch (error) {
     console.warn('[Worker] Error fetching 2nd degree citations:', error);
