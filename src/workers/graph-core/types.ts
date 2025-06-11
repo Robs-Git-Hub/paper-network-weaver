@@ -55,3 +55,63 @@ export interface WorkerMessage {
   type: string;
   payload: any;
 }
+
+// --- START: ADDED MISSING OPENALEX TYPES ---
+
+export interface OpenAlexPaper {
+  id: string;
+  ids?: Record<string, string>;
+  doi?: string | null;
+  title?: string;
+  display_name?: string;
+  publication_year?: number;
+  publication_date?: string;
+  type?: string;
+  language?: string;
+  authorships?: {
+    author_position?: string;
+    author?: {
+      id?: string;
+      display_name: string;
+      orcid?: string;
+    };
+    raw_author_name?: string;
+    institutions?: {
+      id?: string;
+      display_name?: string;
+      country_code?: string;
+    }[];
+  }[];
+  primary_location?: {
+    source?: {
+      display_name?: string;
+    };
+  };
+  fwci?: number;
+  cited_by_count?: number;
+  abstract_inverted_index?: Record<string, number[]> | null;
+  best_oa_location?: any;
+  open_access?: {
+    oa_status?: string;
+    oa_url?: string;
+  };
+  keywords?: {
+    id: string;
+    display_name: string;
+    score?: number;
+  }[];
+  referenced_works?: string[];
+  related_works?: string[];
+}
+
+export interface OpenAlexSearchResponse {
+  results: OpenAlexPaper[];
+  meta: {
+    count: number;
+    db_response_time_ms: number;
+    page: number;
+    per_page: number;
+  };
+}
+
+// --- END: ADDED MISSING OPENALEX TYPES ---

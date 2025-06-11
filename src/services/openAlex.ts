@@ -1,7 +1,7 @@
 
 import { fetchWithRetry } from '../utils/api-helpers';
 import { normalizeOpenAlexId } from './openAlex-util';
-import type { OpenAlexPaper, OpenAlexSearchResponse } from './types';
+import type { OpenAlexPaper, OpenAlexSearchResponse } from '../workers/graph-core/types';
 
 const OPENALEX_API_BATCH_SIZE = 50;
 
