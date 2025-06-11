@@ -115,18 +115,35 @@ export async function fetchSecondDegreeCitations(
   console.log('[Worker] Phase C, Step 8: Fetching 2nd degree citations.');
   utils.postMessage('progress/update', { message: 'Fetching 2nd degree citations...' });
 
-  const firstDegreeCitationUids = state.paperRelationships
-    .filter(rel => rel.relationship_type === 'cites' && rel.target_short_uid === state.masterPaperUid)
-    .map(rel => rel.source_short_uid);
+  // *** START: FINAL DIAGNOSTIC LOGGING ***
+  const firstDegreeRelationships = state.paperRelationships
+    .filter(rel => rel.relationship_type === 'cites' && rel.target_short_uid === state.masterPaperUid);
+  
+  const firstDegreeCitationUids = firstDegreeRelationships.map(rel => rel.source_short_uid);
+
+  console.log('--- [FINAL DIAGNOSTIC] ---');
+  console.log('Master Paper UID:', state.masterPaperUid);
+  console.log(`Found ${firstDegreeRelationships.length} 1st-degree 'cites' relationships.`);
+  console.log('UIDs to find:', firstDegreeCitationUids);
+  
+  const indexValues = Object.values(state.externalIdIndex);
+  console.log(`Total items in externalIdIndex: ${indexValues.length}`);
+  
+  const uidsFoundInIndex = firstDegreeCitationUids.filter(uid => indexValues.includes(uid));
+  console.log(`Of the ${firstDegreeCitationUids.length} UIDs to find, ${uidsFoundInIndex.length} were present in the index values.`);
+
+  if (uidsFoundInIndex.length !== firstDegreeCitationUids.length) {
+    const missingUids = firstDegreeCitationUids.filter(uid => !indexValues.includes(uid));
+    console.error('CRITICAL: The following UIDs from paperRelationships were NOT found in the externalIdIndex:', missingUids);
+  }
+  console.log('--------------------------');
+  // *** END: FINAL DIAGNOSTIC LOGGING ***
 
   if (firstDegreeCitationUids.length === 0) {
     console.log('[Worker] No 1st degree citations found, skipping 2nd degree fetch.');
     return;
   }
 
-  // --- START: OPTIMIZED REVERSE LOOKUP ---
-  // Create a dedicated, temporary reverse-lookup map for efficiency and reliability.
-  // This maps our internal short_uid back to its OpenAlex ID.
   const uidToOpenAlexIdMap: Record<string, string> = {};
   for (const key in state.externalIdIndex) {
     if (key.startsWith('openalex:')) {
@@ -136,19 +153,9 @@ export async function fetchSecondDegreeCitations(
     }
   }
 
-  // Now, perform a fast and direct O(1) lookup for each UID.
   const openAlexIdsOfFirstDegreePapers = firstDegreeCitationUids
     .map(uid => uidToOpenAlexIdMap[uid])
     .filter((id): id is string => id !== null && id !== undefined);
-  // --- END: OPTIMIZED REVERSE LOOKUP ---
-
-  // Your [ULTIMATE DEBUG] log can now be simplified or removed.
-  // This new version is much more robust.
-  console.log('[ULTIMATE DEBUG] Comparing data:', {
-    uidsToFind: firstDegreeCitationUids.length,
-    uidsFound: openAlexIdsOfFirstDegreePapers.length,
-    mapSampleSize: Object.keys(uidToOpenAlexIdMap).length
-  });
 
   if (openAlexIdsOfFirstDegreePapers.length === 0) {
     console.log('[Worker] No OpenAlex IDs found for 1st degree citations. This indicates a logic error in data indexing.');
@@ -230,8 +237,6 @@ export async function fetchSecondDegreeCitations(
   }
 }
 
-// src/workers/graph-core/relationship-builder.ts
-
 export async function hydrateStubPapers(
   state: GraphState,
   utils: UtilityFunctions
@@ -245,7 +250,6 @@ export async function hydrateStubPapers(
 
   if (stubUids.length === 0) return;
 
-  // --- START: OPTIMIZED REVERSE LOOKUP ---
   const uidToOpenAlexIdMap: Record<string, string> = {};
   for (const key in state.externalIdIndex) {
     if (key.startsWith('openalex:')) {
@@ -258,7 +262,6 @@ export async function hydrateStubPapers(
   const openAlexIdsToHydrate = stubUids
     .map(uid => uidToOpenAlexIdMap[uid])
     .filter((id): id is string => id !== null && id !== undefined);
-  // --- END: OPTIMIZED REVERSE LOOKUP ---
 
   if (openAlexIdsToHydrate.length === 0) return;
 
@@ -266,7 +269,6 @@ export async function hydrateStubPapers(
     const responseData = await openAlexService.fetchMultiplePapers(openAlexIdsToHydrate, 'FULL_INGESTION');
     console.log(`[Worker] Hydrating ${responseData.results.length} stub papers.`);
     
-    // Create a reverse map from OpenAlex ID back to stub UID for the final loop
     const openAlexIdToUidMap = Object.fromEntries(Object.entries(uidToOpenAlexIdMap).map(([uid, id]) => [id, uid]));
 
     for (const paperData of responseData.results) {
@@ -275,7 +277,6 @@ export async function hydrateStubPapers(
       
       if (!stubUid || !state.papers[stubUid]) continue;
       
-      // ... (rest of the function is identical)
       const updatedPaper: Paper = {
         ...state.papers[stubUid],
         title: paperData.title || paperData.display_name || state.papers[stubUid].title,
@@ -338,15 +339,13 @@ export async function hydrateMasterPaper(
   const masterPaper = state.papers[state.masterPaperUid];
   if (!masterPaper) return;
   
-  // --- START: OPTIMIZED REVERSE LOOKUP ---
   let openAlexId: string | null = null;
   for (const key in state.externalIdIndex) {
     if (state.externalIdIndex[key] === state.masterPaperUid && key.startsWith('openalex:')) {
       openAlexId = key.substring('openalex:'.length);
-      break; // Found it, no need to search further
+      break; 
     }
   }
-  // --- END: OPTIMIZED REVERSE LOOKUP ---
 
   if (!openAlexId) return;
   
@@ -357,7 +356,6 @@ export async function hydrateMasterPaper(
     const data = await openAlexService.fetchPaperDetails(openAlexId);
     if (!data) return;
     
-    // ... (rest of the function is identical)
     const updatedPaper: Paper = {
       ...masterPaper,
       title: data.title || data.display_name || masterPaper.title,
@@ -388,7 +386,6 @@ export async function hydrateMasterPaper(
   }
 }
 
-// Functions below remain unchanged as they do not directly call the OpenAlex API
 export async function processSemanticScholarRelationships(
   ssData: any,
   state: GraphState,
