@@ -119,6 +119,13 @@ export async function fetchSecondDegreeCitations(
     .filter(rel => rel.relationship_type === 'cites' && rel.target_short_uid === state.masterPaperUid)
     .map(rel => rel.source_short_uid);
 
+  // *** ADD THIS FINAL DIAGNOSTIC LOG ***
+  console.log('[ULTIMATE DEBUG] Comparing data:', {
+    uidsToFind: firstDegreeCitationUids,
+    indexValuesSample: Object.values(state.externalIdIndex).slice(0, 10)
+  });
+  // ************************************
+
   if (firstDegreeCitationUids.length === 0) {
     console.log('[Worker] No 1st degree citations found, skipping 2nd degree fetch.');
     return;
