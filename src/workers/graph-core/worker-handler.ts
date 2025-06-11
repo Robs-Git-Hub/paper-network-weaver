@@ -59,15 +59,20 @@ export function setupWorkerMessageHandler() {
             }
             
             console.log('--- [Worker] Phase A Complete. Posting initial graph to main thread. ---');
+            const finalState = getState();
+
+            // *** STEP 1: Establish Baseline in Worker ***
+            console.log('[Worker-Trace] PRE-POSTMESSAGE: paperRelationships length:', finalState.paperRelationships.length, 'Content:', JSON.stringify(finalState.paperRelationships));
+
             // Translate worker's camelCase to main thread's snake_case for posting
             utils.postMessage('graph/setState', {
               data: {
-                papers: state.papers,
-                authors: state.authors,
-                institutions: state.institutions,
-                authorships: state.authorships,
-                paper_relationships: state.paperRelationships,
-                external_id_index: state.externalIdIndex
+                papers: finalState.papers,
+                authors: finalState.authors,
+                institutions: finalState.institutions,
+                authorships: finalState.authorships,
+                paper_relationships: finalState.paperRelationships,
+                external_id_index: finalState.externalIdIndex
               }
             });
             
@@ -103,6 +108,9 @@ export function setupWorkerMessageHandler() {
         (async () => {
           try {
             if (payload) {
+              // *** STEP 5: Confirm State Reception in Worker for Phase C ***
+              console.log('[Worker-Trace] PHASE-C-RECEIVED: paper_relationships length:', payload.paper_relationships?.length || 0, 'Content:', JSON.stringify(payload.paper_relationships || []));
+
               console.log('[Worker] Synchronizing and translating state from main thread.');
               const currentState = getState();
               
