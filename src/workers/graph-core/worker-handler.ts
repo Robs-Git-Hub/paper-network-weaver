@@ -65,6 +65,14 @@ export function setupWorkerMessageHandler() {
             
             console.log('--- [Worker] Phase A Complete. Posting initial graph to main thread. ---');
             const finalState = getState();
+            
+            // *** ADD THIS DEBUG LOG ***
+            console.log('[DEBUG] State at end of Phase A:', {
+              externalIdIndexSize: Object.keys(finalState.externalIdIndex).length,
+              sampleIndex: Object.fromEntries(Object.entries(finalState.externalIdIndex).slice(0, 5))
+            });
+            // *************************
+            
             utils.postMessage('graph/setState', {
               data: {
                 papers: finalState.papers,

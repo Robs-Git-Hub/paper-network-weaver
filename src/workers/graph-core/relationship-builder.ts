@@ -1,4 +1,3 @@
-
 import { openAlexService } from '../../services/openAlex';
 import { reconstructAbstract, extractKeywords, normalizeDoi, generateShortUid } from '../../utils/data-transformers';
 import { normalizeOpenAlexId } from '../../services/openAlex-util';
@@ -113,6 +112,13 @@ export async function fetchSecondDegreeCitations(
   state: GraphState,
   utils: UtilityFunctions
 ) {
+  // *** ADD THIS DEBUG LOG ***
+  console.log('[DEBUG] State at start of Phase C (fetchSecondDegreeCitations):', {
+      externalIdIndexSize: Object.keys(state.externalIdIndex).length,
+      sampleIndex: Object.fromEntries(Object.entries(state.externalIdIndex).slice(0, 5))
+  });
+  // *************************
+
   console.log('[Worker] Phase C, Step 8: Fetching 2nd degree citations.');
   utils.postMessage('progress/update', { message: 'Fetching 2nd degree citations...' });
 
