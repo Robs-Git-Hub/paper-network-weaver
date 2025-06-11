@@ -1,4 +1,6 @@
 
+// src/components/MainAnalysisView.tsx (Corrected)
+
 import React, { useEffect, useRef, useState } from 'react';
 import { useKnowledgeGraphStore } from '@/store/knowledge-graph-store';
 import { MasterPaperCard } from '@/components/MasterPaperCard';
@@ -18,7 +20,6 @@ export const MainAnalysisView: React.FC<MainAnalysisViewProps> = ({
   currentView = 'Table' 
 }) => {
   const { papers, app_status, setAppStatus } = useKnowledgeGraphStore();
-  const hasExtendedRef = useRef(false);
   
   // Find the master paper (the one that's not a stub and has the most relationships)
   const masterPaper = Object.values(papers).find(paper => !paper.is_stub);
@@ -26,16 +27,7 @@ export const MainAnalysisView: React.FC<MainAnalysisViewProps> = ({
   console.log('[MainAnalysisView] Master paper:', masterPaper);
   console.log('[MainAnalysisView] All papers:', Object.keys(papers).length);
 
-  // *** REPLACED THIS ENTIRE BLOCK ***
-  useEffect(() => {
-    // Only trigger the extension when the app becomes 'active' (after Phase B)
-    // and only do it once.
-    if (app_status.state === 'active' && !hasExtendedRef.current) {
-      hasExtendedRef.current = true;
-      // The worker will set the status to 'extending' itself.
-      workerManager.extendGraph();
-    }
-  }, [app_status.state]); // Depend on the app status state
+  // The entire useEffect hook that called workerManager.extendGraph() has been removed.
 
   if (!masterPaper) {
     return (

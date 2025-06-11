@@ -74,10 +74,10 @@ class WorkerManager {
         break;
 
       case 'enrichment/complete':
-        this.store.getState().setAppStatus({
-          state: 'active',
-          message: 'Graph is ready.'
-        });
+        // --- THIS IS THE FIX ---
+        // When Phase B is confirmed complete, we now trigger Phase C.
+        console.log('[WorkerManager] Phase B complete. Triggering Phase C (extendGraph).');
+        this.extendGraph();
         break;
 
       case 'warning/nonCritical':
