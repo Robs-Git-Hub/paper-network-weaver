@@ -1,6 +1,5 @@
 
 import { openAlexService } from '../../services/openAlex';
-import { semanticScholarService } from '../../services/semanticScholar';
 import { reconstructAbstract, extractKeywords, normalizeDoi, generateShortUid } from '../../utils/data-transformers';
 import { normalizeOpenAlexId } from '../../services/openAlex-util';
 import { processOpenAlexPaper, processOpenAlexAuthor, processOpenAlexInstitution } from './entity-processors';
@@ -285,10 +284,13 @@ export async function hydrateStubPapers(
             institution_uids: []
           };
           
-          (authorship.institutions || []).forEach(async inst => {
-            const instUid = await processOpenAlexInstitution(inst, state.institutions, state.externalIdIndex, utils.addToExternalIndex, utils.findByExternalId);
-            newAuthorship.institution_uids.push(instUid);
-          });
+          // **FIXED BLOCK**: Replaced async forEach with a for...of loop to prevent race conditions.
+          if (authorship.institutions) {
+            for (const inst of authorship.institutions) {
+              const instUid = await processOpenAlexInstitution(inst, state.institutions, state.externalIdIndex, utils.addToExternalIndex, utils.findByExternalId);
+              newAuthorship.institution_uids.push(instUid);
+            }
+          }
           
           state.authorships[authorshipKey] = newAuthorship;
         }
