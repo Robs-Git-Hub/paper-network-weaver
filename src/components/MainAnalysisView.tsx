@@ -26,14 +26,16 @@ export const MainAnalysisView: React.FC<MainAnalysisViewProps> = ({
   console.log('[MainAnalysisView] Master paper:', masterPaper);
   console.log('[MainAnalysisView] All papers:', Object.keys(papers).length);
 
-  // Automatically extend the graph once when master paper is available
+  // *** REPLACED THIS ENTIRE BLOCK ***
   useEffect(() => {
-    if (masterPaper && !hasExtendedRef.current) {
+    // Only trigger the extension when the app becomes 'active' (after Phase B)
+    // and only do it once.
+    if (app_status.state === 'active' && !hasExtendedRef.current) {
       hasExtendedRef.current = true;
-      setAppStatus({ state: 'extending', message: 'Extending graph...' });
+      // The worker will set the status to 'extending' itself.
       workerManager.extendGraph();
     }
-  }, [masterPaper, setAppStatus]);
+  }, [app_status.state]); // Depend on the app status state
 
   if (!masterPaper) {
     return (

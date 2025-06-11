@@ -85,6 +85,9 @@ export function setupWorkerMessageHandler() {
             
             console.log('--- [Worker] Phase B Complete. All enrichment finished. ---');
 
+            // *** ADDED THIS LINE ***
+            utils.postMessage('enrichment/complete', { status: 'success' });
+
           } catch (error) {
             console.error('[Worker] A fatal error occurred during graph build:', error);
             const utils = getUtilityFunctions();

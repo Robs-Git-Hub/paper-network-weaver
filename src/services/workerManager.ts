@@ -68,6 +68,14 @@ class WorkerManager {
         });
         break;
 
+      // *** ADDED THIS CASE ***
+      case 'enrichment/complete':
+        this.store.getState().setAppStatus({
+          state: 'active',
+          message: 'Graph is ready.'
+        });
+        break;
+
       case 'warning/nonCritical':
         // Could show a toast notification
         console.warn('[Worker] Non-critical warning:', payload.message);
