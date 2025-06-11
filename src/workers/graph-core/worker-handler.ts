@@ -6,6 +6,7 @@ import { enrichMasterPaperWithSemanticScholar } from './semantic-scholar';
 import { performAuthorReconciliation } from './author-reconciliation';
 import { getUtilityFunctions } from './utils';
 import { getState, resetState, setMasterPaperUid, setStubCreationThreshold } from './state';
+import { normalizeOpenAlexId } from '../../services/openAlex-util';
 import type { WorkerMessage } from './types';
 
 export function setupWorkerMessageHandler() {
@@ -26,8 +27,15 @@ export function setupWorkerMessageHandler() {
             utils.postMessage('app_status/update', { state: 'loading', message: 'Processing master paper...' });
             
             console.log('[Worker] Phase A, Step 1: Processing Master Paper.');
+            
+            // Clean the master paper data to ensure normalized IDs
+            const cleanMasterPaper = {
+              ...payload.paper,
+              id: normalizeOpenAlexId(payload.paper.id)
+            };
+            
             const masterUid = await processOpenAlexPaper(
-              payload.paper, 
+              cleanMasterPaper, 
               false, 
               state.papers, 
               state.authors, 
@@ -40,10 +48,10 @@ export function setupWorkerMessageHandler() {
             setMasterPaperUid(masterUid);
             console.log('[Worker] Phase A, Step 1: Master Paper processed.');
             
-            if (payload.paper.id) {
+            if (cleanMasterPaper.id) {
               console.log('[Worker] Phase A, Step 2: Fetching and recording 1st-degree citations.');
               // use our relationship-builder which both fetches AND pushes paperRelationships
-              await fetchFirstDegreeCitations(payload.paper.id, state, utils);              
+              await fetchFirstDegreeCitations(cleanMasterPaper.id, state, utils);              
               
               await enrichMasterPaperWithSemanticScholar(
                 state.papers,
