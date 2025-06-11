@@ -8,7 +8,7 @@ import { compareTwoStrings } from 'string-similarity';
 interface KeywordObject {
   id: string;
   display_name: string;
-  score: number;
+  score?: number; // <-- FIX IS HERE: Made score optional to match API data
 }
 
 export function reconstructAbstract(

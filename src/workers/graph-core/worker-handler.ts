@@ -21,6 +21,11 @@ export function setupWorkerMessageHandler() {
             resetState();
             
             const state = getState();
+            
+            // *** DIAGNOSTIC ***: Tag this instance of the index object with a unique ID.
+            (state.externalIdIndex as any).debugId = 'RUN_' + Math.random().toString(36).substr(2, 9);
+            console.log('[DEBUG] Created new state with Index ID:', (state.externalIdIndex as any).debugId);
+            
             setStubCreationThreshold(payload.stub_creation_threshold || 3);
             const utils = getUtilityFunctions(state.externalIdIndex);
             
@@ -66,12 +71,8 @@ export function setupWorkerMessageHandler() {
             console.log('--- [Worker] Phase A Complete. Posting initial graph to main thread. ---');
             const finalState = getState();
             
-            // *** ADD THIS DEBUG LOG ***
-            console.log('[DEBUG] State at end of Phase A:', {
-              externalIdIndexSize: Object.keys(finalState.externalIdIndex).length,
-              sampleIndex: Object.fromEntries(Object.entries(finalState.externalIdIndex).slice(0, 5))
-            });
-            // *************************
+            // *** DIAGNOSTIC ***: Check the ID at the end of Phase A.
+            console.log('[DEBUG] State at end of Phase A - Index ID:', (finalState.externalIdIndex as any).debugId, 'Size:', Object.keys(finalState.externalIdIndex).length);
             
             utils.postMessage('graph/setState', {
               data: {
@@ -114,11 +115,16 @@ export function setupWorkerMessageHandler() {
         
         (async () => {
           try {
-            const utils = getUtilityFunctions(getState().externalIdIndex);
+            const stateForC = getState();
+            
+            // *** DIAGNOSTIC ***: Check the ID at the very start of Phase C.
+            console.log('[DEBUG] State at start of Phase C - Index ID:', (stateForC.externalIdIndex as any).debugId, 'Size:', Object.keys(stateForC.externalIdIndex).length);
+
+            const utils = getUtilityFunctions(stateForC.externalIdIndex);
             utils.postMessage('app_status/update', { state: 'extending', message: 'Extending network...' });
             
-            await fetchSecondDegreeCitations(getState(), utils);
-            await hydrateStubPapers(getState(), utils);
+            await fetchSecondDegreeCitations(stateForC, utils);
+            await hydrateStubPapers(stateForC, utils);
 
             console.log('--- [Worker] Phase C Complete. Graph extension finished. ---');
             utils.postMessage('app_status/update', { state: 'active', message: null });
