@@ -43,9 +43,6 @@ class WorkerManager {
         break;
 
       case 'graph/setState':
-        // *** STEP 2: Trace State Reception in Main Thread ***
-        console.log('[Main-Trace] WORKER-MESSAGE-RECEIVED: paper_relationships length:', payload.data.paper_relationships?.length || 0, 'Content:', JSON.stringify(payload.data.paper_relationships || []));
-        
         this.store.getState().setState(payload.data);
         break;
 
@@ -118,9 +115,6 @@ class WorkerManager {
     // *** MODIFIED THIS BLOCK ***
     // Get the authoritative state from the main thread's store.
     const currentState = this.store.getState();
-
-    // *** STEP 4: Trace State Retrieval for Phase C ***
-    console.log('[Main-Trace] PRE-POSTMESSAGE-TO-WORKER: Sending paper_relationships length:', currentState.paper_relationships?.length || 0, 'Content:', JSON.stringify(currentState.paper_relationships || []));
 
     this.worker.postMessage({
       type: 'graph/extend',

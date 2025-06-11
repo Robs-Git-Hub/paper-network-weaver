@@ -1,4 +1,3 @@
-
 import { create } from 'zustand';
 
 // Define the interfaces for the knowledge graph data
@@ -122,9 +121,6 @@ export const useKnowledgeGraphStore = create<KnowledgeGraphStore>((set, get) => 
   })),
 
   setState: (data) => {
-    // *** STEP 3: Trace State Integration into Zustand Store ***
-    console.log('[Main-Trace] ZUSTAND-SETTER-ENTRY: Received paper_relationships length:', data.paper_relationships?.length || 0, 'Content:', JSON.stringify(data.paper_relationships || []));
-    
     set({
       papers: data.papers,
       authors: data.authors,
@@ -133,10 +129,6 @@ export const useKnowledgeGraphStore = create<KnowledgeGraphStore>((set, get) => 
       paper_relationships: data.paper_relationships,
       external_id_index: data.external_id_index
     });
-
-    // Get the new state after setting
-    const newState = get();
-    console.log('[Main-Trace] ZUSTAND-SETTER-EXIT: New state paper_relationships length:', newState.paper_relationships?.length || 0, 'Content:', JSON.stringify(newState.paper_relationships || []));
   },
 
   updatePaper: (id, changes) => set((state) => ({
