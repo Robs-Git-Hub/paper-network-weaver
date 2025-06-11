@@ -101,16 +101,20 @@ export function setupWorkerMessageHandler() {
         
         (async () => {
           try {
-            // *** MODIFIED THIS BLOCK ***
             // Before executing, synchronize the worker's state with the authoritative state from the main thread.
             if (payload) {
               console.log('[Worker] Synchronizing state from main thread.');
-              // Note: This assumes the payload structure matches what setState expects.
-              // We are not passing masterPaperUid or stubCreationThreshold back, as they are not modified on the main thread.
-              // The worker's internal values for these are still correct.
               const currentState = getState();
+              
+              // Explicitly map properties from the main thread's snake_case
+              // to the worker's internal camelCase state structure.
               setState({
-                ...payload,
+                papers: payload.papers,
+                authors: payload.authors,
+                institutions: payload.institutions,
+                authorships: payload.authorships,
+                paperRelationships: payload.paper_relationships, // FIX: Map snake_case to camelCase
+                externalIdIndex: payload.external_id_index,     // FIX: Map snake_case to camelCase
                 masterPaperUid: currentState.masterPaperUid,
                 stubCreationThreshold: currentState.stubCreationThreshold
               });
