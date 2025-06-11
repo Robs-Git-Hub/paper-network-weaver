@@ -1,6 +1,7 @@
 
 import { reconstructAbstract, extractKeywords, normalizeDoi, generateShortUid } from '../../utils/data-transformers';
 import { normalizeOpenAlexId } from '../../services/openAlex-util';
+import { addToExternalIndex, findByExternalId } from './utils';
 import type { Paper, Author, Institution, Authorship } from './types';
 
 // Entity processing functions
@@ -12,15 +13,11 @@ export async function processOpenAlexPaper(
   papers: Record<string, Paper>,
   authors: Record<string, Author>,
   institutions: Record<string, Institution>,
-  authorships: Record<string, Authorship>,
-  externalIdIndex: Record<string, string>,
-  addToExternalIndex: (idType: string, idValue: string, entityUid: string) => void,
-  findByExternalId: (idType: string, idValue: string) => string | null
+  authorships: Record<string, Authorship>
 ): Promise<string> {
   let paperUid: string | null = null;
 
-  // Step 1: Find an existing paper using any available ID, without exiting early.
-  // This is the core change: we establish a UID but don't return immediately.
+  // Step 1: Find an existing paper using any available ID.
   if (paperData.doi) {
     const normalizedDoi = normalizeDoi(paperData.doi);
     if (normalizedDoi) {
@@ -28,7 +25,6 @@ export async function processOpenAlexPaper(
     }
   }
   if (!paperUid && paperData.id) {
-    // The incoming paperData.id is assumed to be pre-normalized before this function is called.
     paperUid = findByExternalId('openalex', paperData.id);
   }
 
@@ -54,14 +50,12 @@ export async function processOpenAlexPaper(
     };
     papers[paperUid] = newPaper;
   } else {
-    // If an existing paper is found and we're processing a full version, update its stub status.
     if (!isStub && papers[paperUid].is_stub) {
       papers[paperUid].is_stub = false;
     }
   }
 
-  // Step 3: CRITICAL - Ensure ALL available IDs from the current data are in the index.
-  // This block now runs every time, adding missing IDs to existing papers and ensuring consistency.
+  // Step 3: Ensure ALL available IDs are in the index.
   if (paperData.id) {
     addToExternalIndex('openalex', paperData.id, paperUid);
   }
@@ -72,24 +66,13 @@ export async function processOpenAlexPaper(
     }
   }
 
-  // Step 4: Process authorships. This logic is largely unchanged but now operates on a consistently indexed paper.
-  // We only process authorships for non-stubs to avoid creating partial data.
+  // Step 4: Process authorships for non-stubs.
   if (!isStub && paperData.authorships) {
     for (let i = 0; i < paperData.authorships.length; i++) {
       const authorship = paperData.authorships[i];
-      const authorUid = await processOpenAlexAuthor(
-        authorship.author, 
-        isStub, 
-        authors, 
-        institutions, 
-        authorships, 
-        externalIdIndex, 
-        addToExternalIndex, 
-        findByExternalId
-      );
+      const authorUid = await processOpenAlexAuthor(authorship.author, isStub, authors);
       
       const authorshipKey = `${paperUid}_${authorUid}`;
-      // Only create authorship if it doesn't already exist
       if (!authorships[authorshipKey]) {
         authorships[authorshipKey] = {
           paper_short_uid: paperUid,
@@ -102,13 +85,7 @@ export async function processOpenAlexPaper(
 
         if (authorship.institutions) {
           for (const inst of authorship.institutions) {
-            const instUid = await processOpenAlexInstitution(
-              inst, 
-              institutions, 
-              externalIdIndex, 
-              addToExternalIndex, 
-              findByExternalId
-            );
+            const instUid = await processOpenAlexInstitution(inst, institutions);
             authorships[authorshipKey].institution_uids.push(instUid);
           }
         }
@@ -122,12 +99,7 @@ export async function processOpenAlexPaper(
 export async function processOpenAlexAuthor(
   authorData: any, 
   isStub = false,
-  authors: Record<string, Author>,
-  institutions: Record<string, Institution>,
-  authorships: Record<string, Authorship>,
-  externalIdIndex: Record<string, string>,
-  addToExternalIndex: (idType: string, idValue: string, entityUid: string) => void,
-  findByExternalId: (idType: string, idValue: string) => string | null
+  authors: Record<string, Author>
 ): Promise<string> {
   if (authorData.id) {
     const cleanId = normalizeOpenAlexId(authorData.id);
@@ -156,10 +128,7 @@ export async function processOpenAlexAuthor(
 
 export async function processOpenAlexInstitution(
   instData: any,
-  institutions: Record<string, Institution>,
-  externalIdIndex: Record<string, string>,
-  addToExternalIndex: (idType: string, idValue: string, entityUid: string) => void,
-  findByExternalId: (idType: string, idValue: string) => string | null
+  institutions: Record<string, Institution>
 ): Promise<string> {
   if (instData.id) {
     const cleanId = normalizeOpenAlexId(instData.id);

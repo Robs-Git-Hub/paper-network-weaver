@@ -1,7 +1,9 @@
+
 import { openAlexService } from '../../services/openAlex';
 import { reconstructAbstract, extractKeywords, normalizeDoi, generateShortUid } from '../../utils/data-transformers';
 import { normalizeOpenAlexId } from '../../services/openAlex-util';
 import { processOpenAlexPaper, processOpenAlexAuthor, processOpenAlexInstitution } from './entity-processors';
+import { findByExternalId } from './utils';
 import type { Paper, Author, Institution, Authorship, PaperRelationship } from './types';
 
 interface GraphState {
@@ -37,8 +39,7 @@ export async function fetchFirstDegreeCitations(
   for (const paperData of data.results) {
     const cleanPaperData = { ...paperData, id: normalizeOpenAlexId(paperData.id) };
     const paperUid = await processOpenAlexPaper(
-      cleanPaperData, false, state.papers, state.authors, state.institutions, 
-      state.authorships, state.externalIdIndex, utils.addToExternalIndex, utils.findByExternalId
+      cleanPaperData, false, state.papers, state.authors, state.institutions, state.authorships
     );
     
     if (state.papers[paperUid] && !state.papers[paperUid].relationship_tags.includes('1st_degree')) {
@@ -90,8 +91,7 @@ export async function createStubsFromOpenAlexIds(
   for (const paperData of responseData.results) {
     const cleanPaperData = { ...paperData, id: normalizeOpenAlexId(paperData.id) };
     const stubUid = await processOpenAlexPaper(
-      cleanPaperData, true, state.papers, state.authors, state.institutions, 
-      state.authorships, state.externalIdIndex, utils.addToExternalIndex, utils.findByExternalId
+      cleanPaperData, true, state.papers, state.authors, state.institutions, state.authorships
     );
     
     if (tag && state.papers[stubUid] && !state.papers[stubUid].relationship_tags.includes(tag)) {
@@ -112,13 +112,6 @@ export async function fetchSecondDegreeCitations(
   state: GraphState,
   utils: UtilityFunctions
 ) {
-  // *** ADD THIS DEBUG LOG ***
-  console.log('[DEBUG] State at start of Phase C (fetchSecondDegreeCitations):', {
-      externalIdIndexSize: Object.keys(state.externalIdIndex).length,
-      sampleIndex: Object.fromEntries(Object.entries(state.externalIdIndex).slice(0, 5))
-  });
-  // *************************
-
   console.log('[Worker] Phase C, Step 8: Fetching 2nd degree citations.');
   utils.postMessage('progress/update', { message: 'Fetching 2nd degree citations...' });
 
@@ -154,15 +147,12 @@ export async function fetchSecondDegreeCitations(
     for (const paperData of data.results) {
       const cleanPaperData = { ...paperData, id: normalizeOpenAlexId(paperData.id) };
       
-      // Determine the UID of the 2nd-degree paper, creating it if it doesn't exist.
-      let paperUid = utils.findByExternalId('openalex', cleanPaperData.id);
+      let paperUid = findByExternalId('openalex', cleanPaperData.id);
       if (!paperUid) {
         paperUid = await processOpenAlexPaper(
-          cleanPaperData, false, state.papers, state.authors, state.institutions, 
-          state.authorships, state.externalIdIndex, utils.addToExternalIndex, utils.findByExternalId
+          cleanPaperData, false, state.papers, state.authors, state.institutions, state.authorships
         );
         
-        // If it's a new paper, add its associated entities to the "new" collections for the UI update.
         newPapers[paperUid] = state.papers[paperUid];
         Object.entries(state.authorships).forEach(([key, authorship]) => {
           if (authorship.paper_short_uid === paperUid) {
@@ -179,20 +169,17 @@ export async function fetchSecondDegreeCitations(
         });
       }
       
-      // Tag the paper as a 2nd-degree citation if it's not already.
       if (state.papers[paperUid] && !state.papers[paperUid].relationship_tags.includes('2nd_degree')) {
         state.papers[paperUid].relationship_tags.push('2nd_degree');
       }
       
-      // CRITICAL FIX: Create the relationship regardless of whether the paper was new or existing.
       (paperData.referenced_works || []).forEach(refWorkUrl => {
         const citedWorkId = normalizeOpenAlexId(refWorkUrl);
-        // Check if this 2nd-degree paper cites one of our 1st-degree papers.
         if (openAlexIdsOfFirstDegreePapers.includes(citedWorkId)) {
-          const targetUid = utils.findByExternalId('openalex', citedWorkId);
+          const targetUid = findByExternalId('openalex', citedWorkId);
           if (targetUid) {
             newRelationships.push({
-              source_short_uid: paperUid,
+              source_short_uid: paperUid!,
               target_short_uid: targetUid,
               relationship_type: 'cites'
             });
@@ -279,7 +266,7 @@ export async function hydrateStubPapers(
       if (paperData.authorships) {
         for (let i = 0; i < paperData.authorships.length; i++) {
           const authorship = paperData.authorships[i];
-          const authorUid = await processOpenAlexAuthor(authorship.author, false, state.authors, state.institutions, state.authorships, state.externalIdIndex, utils.addToExternalIndex, utils.findByExternalId);
+          const authorUid = await processOpenAlexAuthor(authorship.author, false, state.authors);
           
           const authorshipKey = `${stubUid}_${authorUid}`;
           const newAuthorship: Authorship = {
@@ -291,10 +278,9 @@ export async function hydrateStubPapers(
             institution_uids: []
           };
           
-          // **FIXED BLOCK**: Replaced async forEach with a for...of loop to prevent race conditions.
           if (authorship.institutions) {
             for (const inst of authorship.institutions) {
-              const instUid = await processOpenAlexInstitution(inst, state.institutions, state.externalIdIndex, utils.addToExternalIndex, utils.findByExternalId);
+              const instUid = await processOpenAlexInstitution(inst, state.institutions);
               newAuthorship.institution_uids.push(instUid);
             }
           }
@@ -404,13 +390,13 @@ async function processSemanticScholarPaper(
   if (paperData.externalIds?.DOI) {
     const normalizedDoi = normalizeDoi(paperData.externalIds.DOI);
     if (normalizedDoi) {
-      const existingUid = utils.findByExternalId('doi', normalizedDoi);
+      const existingUid = findByExternalId('doi', normalizedDoi);
       if (existingUid) return existingUid;
     }
   }
   
   if (paperData.paperId) {
-    const existingUid = utils.findByExternalId('ss', paperData.paperId);
+    const existingUid = findByExternalId('ss', paperData.paperId);
     if (existingUid) return existingUid;
   }
   
@@ -472,7 +458,7 @@ async function processSemanticScholarAuthor(
   utils: UtilityFunctions
 ): Promise<string> {
   if (authorData.authorId) {
-    const existingUid = utils.findByExternalId('ss_author', authorData.authorId);
+    const existingUid = findByExternalId('ss_author', authorData.authorId);
     if (existingUid) return existingUid;
   }
   
