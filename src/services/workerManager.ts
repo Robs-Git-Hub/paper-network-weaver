@@ -68,7 +68,6 @@ class WorkerManager {
         });
         break;
 
-      // *** ADDED THIS CASE ***
       case 'enrichment/complete':
         this.store.getState().setAppStatus({
           state: 'active',
@@ -113,9 +112,21 @@ class WorkerManager {
       throw new Error('Worker not initialized');
     }
 
+    // *** MODIFIED THIS BLOCK ***
+    // Get the authoritative state from the main thread's store.
+    const currentState = this.store.getState();
+
     this.worker.postMessage({
       type: 'graph/extend',
-      payload: null // No payload needed for the simplified action
+      // Pass the state to the worker to ensure it's not stale.
+      payload: {
+        papers: currentState.papers,
+        authors: currentState.authors,
+        institutions: currentState.institutions,
+        authorships: currentState.authorships,
+        paper_relationships: currentState.paper_relationships,
+        external_id_index: currentState.external_id_index,
+      }
     });
   }
 

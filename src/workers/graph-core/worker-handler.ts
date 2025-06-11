@@ -5,7 +5,7 @@ import { fetchFirstDegreeCitations, fetchSecondDegreeCitations, hydrateStubPaper
 import { enrichMasterPaperWithSemanticScholar } from './semantic-scholar';
 import { performAuthorReconciliation } from './author-reconciliation';
 import { getUtilityFunctions, addToExternalIndex } from './utils';
-import { getState, resetState, setMasterPaperUid, setStubCreationThreshold } from './state';
+import { getState, resetState, setMasterPaperUid, setStubCreationThreshold, setState } from './state'; // <-- IMPORT setState
 import { normalizeOpenAlexId } from '../../services/openAlex-util';
 import type { WorkerMessage } from './types';
 
@@ -84,8 +84,6 @@ export function setupWorkerMessageHandler() {
             );
             
             console.log('--- [Worker] Phase B Complete. All enrichment finished. ---');
-
-            // *** ADDED THIS LINE ***
             utils.postMessage('enrichment/complete', { status: 'success' });
 
           } catch (error) {
@@ -103,6 +101,21 @@ export function setupWorkerMessageHandler() {
         
         (async () => {
           try {
+            // *** MODIFIED THIS BLOCK ***
+            // Before executing, synchronize the worker's state with the authoritative state from the main thread.
+            if (payload) {
+              console.log('[Worker] Synchronizing state from main thread.');
+              // Note: This assumes the payload structure matches what setState expects.
+              // We are not passing masterPaperUid or stubCreationThreshold back, as they are not modified on the main thread.
+              // The worker's internal values for these are still correct.
+              const currentState = getState();
+              setState({
+                ...payload,
+                masterPaperUid: currentState.masterPaperUid,
+                stubCreationThreshold: currentState.stubCreationThreshold
+              });
+            }
+
             const state = getState();
             const utils = getUtilityFunctions();
             
