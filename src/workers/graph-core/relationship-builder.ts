@@ -112,6 +112,59 @@ export async function fetchFirstDegreeCitations(
   console.log(`[Worker] Phase A, Step 2: Processed ${data.results.length} citations, found ${referencedBy1stDegreeIds.length} referenced_by_1st_degree stubs and ${frequentRelated.length} frequent similar stubs.`);
 }
 
+export async function createStubsFromOpenAlexIds(
+  openAlexIds: string[], 
+  relationshipType: 'cites' | 'similar', 
+  state: GraphState, 
+  utils: UtilityFunctions,
+  tag?: '1st_degree' | '2nd_degree' | 'referenced_by_1st_degree' | 'similar'
+) {
+  if (openAlexIds.length === 0) return;
+  
+  const url = `https://api.openalex.org/works?filter=openalex:${openAlexIds.join('|')}&select=id,title,display_name,publication_year,publication_date,primary_location,cited_by_count,type,authorships`;
+  
+  const response = await fetchWithRetry(url);
+  if (!response.ok) {
+    console.warn(`[Worker] Could not fetch stubs for ${relationshipType}. Status: ${response.status}`);
+    return;
+  }
+  
+  const data = await response.json();
+  
+  for (const paperData of data.results) {
+    const stubUid = await processOpenAlexPaper(
+      paperData, 
+      true, 
+      state.papers, 
+      state.authors, 
+      state.institutions, 
+      state.authorships, 
+      state.externalIdIndex, 
+      utils.addToExternalIndex, 
+      utils.findByExternalId
+    );
+    
+    // Add relationship tag to the paper
+    if (tag && state.papers[stubUid]) {
+      if (!state.papers[stubUid].relationship_tags.includes(tag)) {
+        state.papers[stubUid].relationship_tags.push(tag);
+      }
+    }
+    
+    const relationship: PaperRelationship = {
+      source_short_uid: relationshipType === 'cites' ? state.masterPaperUid! : state.masterPaperUid!,
+      target_short_uid: relationshipType === 'cites' ? stubUid : stubUid,
+      relationship_type: relationshipType
+    };
+
+    if (tag) {
+      relationship.tag = tag;
+    }
+
+    state.paperRelationships.push(relationship);
+  }
+}
+
 export async function fetchSecondDegreeCitations(
   state: GraphState,
   utils: UtilityFunctions
