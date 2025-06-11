@@ -2,16 +2,6 @@
 import { openAlexService } from '../../services/openAlex';
 import { normalizeOpenAlexId } from '../../services/openAlex-util';
 
-const BATCH_SIZE = 20;
-
-function chunkArray<T>(arr: T[], size: number): T[][] {
-  const chunks: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) {
-    chunks.push(arr.slice(i, i + size));
-  }
-  return chunks;
-}
-
 export async function fetchFirstDegreeCitations(openAlexId: string) {
   console.log(`[Citation Fetch] Fetching first-degree citations for ${openAlexId}`);
   return await openAlexService.fetchCitations(openAlexId);
@@ -19,20 +9,16 @@ export async function fetchFirstDegreeCitations(openAlexId: string) {
 
 export async function fetchSecondDegreeCitations(citingPaperIds: string[]) {
   console.log(`[Citation Fetch] Fetching second-degree citations for ${citingPaperIds.length} papers`);
-  const cleanIds = citingPaperIds.map(normalizeOpenAlexId);
-  const idChunks = chunkArray(cleanIds, BATCH_SIZE);
-  const detailedResults = [];
-
-  for (const chunk of idChunks) {
-    console.log(`[Citation Fetch] Processing batch of ${chunk.length} papers`);
-    const batch = await openAlexService.fetchMultiplePapers(chunk);
-    detailedResults.push(...batch.results);
+  
+  if (citingPaperIds.length === 0) {
+    return {
+      meta: { count: 0, db_response_time_ms: 0, page: 1, per_page: 0 },
+      results: []
+    };
   }
 
-  return {
-    meta: { count: detailedResults.length, db_response_time_ms: 0, page: 1, per_page: detailedResults.length },
-    results: detailedResults
-  };
+  const result = await openAlexService.fetchMultiplePapers(citingPaperIds);
+  return result;
 }
 
 export async function fetchAllCitations(openAlexId: string) {
@@ -44,17 +30,13 @@ export async function fetchAllCitations(openAlexId: string) {
     return firstDegree;
   }
 
-  console.log(`[Citation Fetch] Found ${citingIds.length} citing papers, fetching in batches of ${BATCH_SIZE}`);
-  const idChunks = chunkArray(citingIds, BATCH_SIZE);
-  const detailedResults = [];
+  console.log(`[Citation Fetch] Found ${citingIds.length} citing papers, fetching details`);
+  const detailedPapers = await openAlexService.fetchMultiplePapers(citingIds);
 
-  for (const chunk of idChunks) {
-    console.log(`[Citation Fetch] Processing batch of ${chunk.length} papers`);
-    const batch = await openAlexService.fetchMultiplePapers(chunk);
-    detailedResults.push(...batch.results);
-  }
-
-  return { meta: firstDegree.meta, results: detailedResults };
+  return { 
+    meta: firstDegree.meta, 
+    results: detailedPapers.results 
+  };
 }
 
 export function createStubsFromOpenAlexIds(openAlexIds: string[]) {

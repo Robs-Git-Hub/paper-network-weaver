@@ -1,6 +1,8 @@
 import { fetchWithRetry } from '../utils/api-helpers';
 import { normalizeOpenAlexId } from './openAlex-util';
 
+const OPENALEX_API_BATCH_SIZE = 50;
+
 // Corrected and more complete type definitions based on project docs and API usage.
 interface OpenAlexPaper {
   id: string;
@@ -117,22 +119,60 @@ export class OpenAlexService {
   }
 
   async fetchMultiplePapers(workIds: string[]): Promise<OpenAlexSearchResponse> {
-    // Clean all IDs and prefix "openalex:" once, then join bare IDs
-    const cleanIds = workIds.map(normalizeOpenAlexId);
-    const filterParam = `openalex:${cleanIds.join('|')}`;
-    const url = `${this.baseUrl}/works?filter=${filterParam}` +
-      `&select=id,ids,doi,title,publication_year,publication_date,type,language,` +
-      `authorships,primary_location,fwci,cited_by_count,abstract_inverted_index,` +
-      `best_oa_location,open_access,keywords,referenced_works,related_works`;
+    // Normalize all incoming IDs
+    const normalizedIds = workIds.map(normalizeOpenAlexId);
     
-    const response = await fetchWithRetry(url);
-    if (response.status === 404) {
-      return { results: [], meta: { count: 0, db_response_time_ms: 0, page: 1, per_page: workIds.length } };
+    // Handle empty array edge case
+    if (normalizedIds.length === 0) {
+      return { results: [], meta: { count: 0, db_response_time_ms: 0, page: 1, per_page: 0 } };
     }
-    if (!response.ok) {
-      throw new Error(`OpenAlex batch fetch error: ${response.status} ${response.statusText}`);
+
+    // Split into chunks of maximum batch size
+    const chunks: string[][] = [];
+    for (let i = 0; i < normalizedIds.length; i += OPENALEX_API_BATCH_SIZE) {
+      chunks.push(normalizedIds.slice(i, i + OPENALEX_API_BATCH_SIZE));
     }
-    return response.json();
+
+    // Create promises for each chunk
+    const chunkPromises = chunks.map(async (chunk) => {
+      const filterParam = `openalex:${chunk.join('|')}`;
+      const url = `${this.baseUrl}/works?filter=${filterParam}` +
+        `&select=id,ids,doi,title,publication_year,publication_date,type,language,` +
+        `authorships,primary_location,fwci,cited_by_count,abstract_inverted_index,` +
+        `best_oa_location,open_access,keywords,referenced_works,related_works`;
+      
+      const response = await fetchWithRetry(url);
+      if (response.status === 404) {
+        return { results: [], meta: { count: 0, db_response_time_ms: 0, page: 1, per_page: chunk.length } };
+      }
+      if (!response.ok) {
+        throw new Error(`OpenAlex batch fetch error: ${response.status} ${response.statusText}`);
+      }
+      return response.json();
+    });
+
+    // Execute all requests concurrently
+    const chunkResponses: OpenAlexSearchResponse[] = await Promise.all(chunkPromises);
+
+    // Flatten all results into a single array
+    const allResults: OpenAlexPaper[] = [];
+    let totalDbTime = 0;
+    
+    for (const chunkResponse of chunkResponses) {
+      allResults.push(...chunkResponse.results);
+      totalDbTime += chunkResponse.meta.db_response_time_ms;
+    }
+
+    // Return aggregated response
+    return {
+      results: allResults,
+      meta: {
+        count: allResults.length,
+        db_response_time_ms: totalDbTime,
+        page: 1,
+        per_page: allResults.length
+      }
+    };
   }
 }
 
