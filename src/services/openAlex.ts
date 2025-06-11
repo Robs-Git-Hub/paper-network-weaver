@@ -1,9 +1,20 @@
 
+// src/services/openAlex.ts
+
 import { fetchWithRetry } from '../utils/api-helpers';
 import { normalizeOpenAlexId } from './openAlex-util';
 import type { OpenAlexPaper, OpenAlexSearchResponse } from '../workers/graph-core/types';
 
 const OPENALEX_API_BATCH_SIZE = 50;
+
+// Utility function to chunk arrays, can be defined inside or outside the class
+function chunkArray<T>(array: T[], chunkSize: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < array.length; i += chunkSize) {
+    chunks.push(array.slice(i, i + chunkSize));
+  }
+  return chunks;
+}
 
 const OPENALEX_FIELD_SETS = {
   SEARCH_PREVIEW: [
@@ -17,7 +28,6 @@ const OPENALEX_FIELD_SETS = {
   AUTHOR_RECONCILIATION: [
     'doi', 'authorships'
   ],
-  // NEW: A smaller field set for creating lightweight stub entities.
   STUB_CREATION: [
     'id', 'ids', 'doi', 'title', 'display_name', 'publication_year', 'publication_date', 
     'primary_location', 'cited_by_count', 'type', 'authorships'
@@ -60,23 +70,36 @@ export class OpenAlexService {
     return response.json();
   }
 
-  // NEW: A dedicated method for fetching all papers that cite a list of works.
+  // --- REFACTORED FUNCTION ---
   async fetchCitationsForMultiplePapers(workIds: string[]): Promise<OpenAlexSearchResponse> {
     const normalizedIds = workIds.map(normalizeOpenAlexId);
     if (normalizedIds.length === 0) {
       return { results: [], meta: { count: 0, db_response_time_ms: 0, page: 1, per_page: 0 } };
     }
     
-    // The `cites` filter supports the OR operator, so we can make one efficient call.
-    const filter = `cites:${normalizedIds.join('|')}`;
-    const url = this.buildOpenAlexUrl(filter, 'FULL_INGESTION', 200);
-    
-    const response = await fetchWithRetry(url);
-    if (!response.ok) {
-      console.warn(`[Worker] Failed to fetch 2nd degree citations: ${response.status}`);
-      return { results: [], meta: { count: 0, db_response_time_ms: 0, page: 1, per_page: 0 } };
+    const idChunks = chunkArray(normalizedIds, OPENALEX_API_BATCH_SIZE);
+
+    const promises = idChunks.map(chunk => {
+      const filter = `cites:${chunk.join('|')}`;
+      const url = this.buildOpenAlexUrl(filter, 'FULL_INGESTION', 200);
+      return fetchWithRetry(url);
+    });
+
+    const responses = await Promise.all(promises);
+    const allResults: OpenAlexPaper[] = [];
+    for (const response of responses) {
+      if (response.ok) {
+        const data: OpenAlexSearchResponse = await response.json();
+        if (data.results) allResults.push(...data.results);
+      } else {
+        console.warn(`[Worker] A chunk failed during fetchCitationsForMultiplePapers: ${response.status}`);
+      }
     }
-    return response.json();
+
+    return {
+      results: allResults,
+      meta: { count: allResults.length, db_response_time_ms: 0, page: 1, per_page: allResults.length },
+    };
   }
 
   async fetchPaperDetails(openAlexId: string): Promise<OpenAlexPaper | null> {
@@ -99,12 +122,10 @@ export class OpenAlexService {
       return { results: [], meta: { count: 0, db_response_time_ms: 0, page: 1, per_page: 0 } };
     }
 
-    const chunks: string[][] = [];
-    for (let i = 0; i < normalizedIds.length; i += OPENALEX_API_BATCH_SIZE) {
-      chunks.push(normalizedIds.slice(i, i + OPENALEX_API_BATCH_SIZE));
-    }
+    const idChunks = chunkArray(normalizedIds, OPENALEX_API_BATCH_SIZE);
 
-    const promises = chunks.map(chunk => {
+    const promises = idChunks.map(chunk => {
+      // Note: The filter key is 'openalex' here, not 'cites'. This is correct.
       const filter = `openalex:${chunk.join('|')}`;
       const url = this.buildOpenAlexUrl(filter, fieldSetName);
       return fetchWithRetry(url);
