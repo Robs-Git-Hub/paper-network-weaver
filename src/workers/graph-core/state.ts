@@ -12,12 +12,15 @@ export let masterPaperUid: string | null = null;
 export let stubCreationThreshold = 3;
 
 export function resetState() {
-  papers = {};
-  authors = {};
-  institutions = {};
-  authorships = {};
-  paperRelationships = [];
-  externalIdIndex = {};
+  // Clear mutable objects and arrays without breaking references
+  for (const key in papers) delete papers[key];
+  for (const key in authors) delete authors[key];
+  for (const key in institutions) delete institutions[key];
+  for (const key in authorships) delete authorships[key];
+  for (const key in externalIdIndex) delete externalIdIndex[key];
+  paperRelationships.length = 0;
+
+  // Reset primitive values
   masterPaperUid = null;
   stubCreationThreshold = 3;
 }
