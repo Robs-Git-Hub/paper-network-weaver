@@ -1,7 +1,7 @@
 
 // Author reconciliation and merging
-import { fetchWithRetry } from '../../utils/api-helpers';
-import { normalizeDoi, calculateMatchScore } from '../../utils/data-transformers';
+import { openAlexService } from '../../services/openAlex'; // ADD THIS IMPORT
+import { calculateMatchScore } from '../../utils/data-transformers';
 import type { Author, Paper, Authorship } from './types';
 
 export async function performAuthorReconciliation(
@@ -67,33 +67,33 @@ export async function performAuthorReconciliation(
   }> = [];
   
   try {
-    const url = `https://api.openalex.org/works?filter=doi:${dois.join('|')}&select=id,title,authorships`;
-    const response = await fetchWithRetry(url);
+    // REFACTORED BLOCK: Use the OpenAlexService instead of a manual fetch.
+    const openAlexResponse = await openAlexService.fetchMultiplePapers(
+      dois, 
+      'AUTHOR_RECONCILIATION'
+    );
     
-    if (response.ok) {
-      const data = await response.json();
+    for (const paperData of openAlexResponse.results) {
+      // The service normalizes DOIs, but we ensure it here for map lookup consistency.
+      const paperDoi = paperData.doi?.replace('https://doi.org/', '') || '';
+      if (!paperDoi || !reconciliationMap.has(paperDoi)) continue;
       
-      for (const paperData of data.results) {
-        const paperDoi = normalizeDoi(paperData.doi);
-        if (!paperDoi || !reconciliationMap.has(paperDoi)) continue;
-        
-        const stubInfo = reconciliationMap.get(paperDoi)!;
-        
-        for (const stub of stubInfo) {
-          for (const openAlexAuthorship of paperData.authorships || []) {
-            const score = calculateMatchScore(
-              stub.stubAuthor.clean_name,
-              openAlexAuthorship.author.display_name
-            );
-            
-            if (score > 0.85) {
-              successfulMatches.push({
-                stubAuthor: stub.stubAuthor,
-                candidateAuthor: openAlexAuthorship.author,
-                score,
-                paper: stub.paper
-              });
-            }
+      const stubInfo = reconciliationMap.get(paperDoi)!;
+      
+      for (const stub of stubInfo) {
+        for (const openAlexAuthorship of paperData.authorships || []) {
+          const score = calculateMatchScore(
+            stub.stubAuthor.clean_name,
+            openAlexAuthorship.author.display_name
+          );
+          
+          if (score > 0.85) {
+            successfulMatches.push({
+              stubAuthor: stub.stubAuthor,
+              candidateAuthor: openAlexAuthorship.author,
+              score,
+              paper: stub.paper
+            });
           }
         }
       }

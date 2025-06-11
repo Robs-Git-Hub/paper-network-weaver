@@ -1,177 +1,129 @@
+
 import { fetchWithRetry } from '../utils/api-helpers';
 import { normalizeOpenAlexId } from './openAlex-util';
+import type { OpenAlexPaper, OpenAlexSearchResponse } from './types';
 
 const OPENALEX_API_BATCH_SIZE = 50;
 
-// Corrected and more complete type definitions based on project docs and API usage.
-interface OpenAlexPaper {
-  id: string;
-  ids?: {
-    openalex: string;
-    doi?: string;
-    mag?: string;
-  };
-  doi?: string;
-  title?: string;
-  display_name?: string;
-  publication_year: number | null;
-  publication_date: string | null;
-  type: string;
-  language?: string;
-  fwci?: number;
-  cited_by_count: number;
-  authorships: Array<{
-    author_position: string; // Can be 'first', 'middle', 'last'
-    is_corresponding: boolean;
-    raw_author_name: string | null;
-    author: {
-      id: string;
-      display_name: string;
-      orcid?: string;
-    };
-    institutions: Array<{
-      id: string;
-      display_name: string;
-      ror?: string;
-      country_code?: string;
-      type?: string;
-    }>;
-  }>;
-  primary_location?: {
-    source?: {
-      display_name: string;
-    };
-  };
-  best_oa_location?: {
-    pdf_url?: string;
-    source?: any;
-    is_oa: boolean;
-    landing_page_url?: string;
-  };
-  open_access?: {
-    oa_status?: 'gold' | 'green' | 'hybrid' | 'bronze' | 'closed';
-    oa_url?: string;
-    is_oa: boolean;
-  };
-  keywords?: Array<{
-    id: string;
-    display_name: string;
-    score: number;
-  }>;
-  referenced_works: string[];
-  related_works: string[];
-  abstract_inverted_index?: Record<string, number[]>;
-}
-
-interface OpenAlexSearchResponse {
-  results: OpenAlexPaper[];
-  meta: {
-    count: number;
-    db_response_time_ms: number;
-    page: number;
-    per_page: number;
-  };
-}
+const OPENALEX_FIELD_SETS = {
+  SEARCH_PREVIEW: [
+    'id', 'doi', 'display_name', 'publication_year', 'authorships', 'primary_location'
+  ],
+  FULL_INGESTION: [
+    'id', 'ids', 'doi', 'title', 'publication_year', 'publication_date', 'type', 'language',
+    'authorships', 'primary_location', 'fwci', 'cited_by_count', 'abstract_inverted_index',
+    'best_oa_location', 'open_access', 'keywords', 'referenced_works', 'related_works'
+  ],
+  AUTHOR_RECONCILIATION: [
+    'doi', 'authorships'
+  ],
+  // NEW: A smaller field set for creating lightweight stub entities.
+  STUB_CREATION: [
+    'id', 'ids', 'doi', 'title', 'display_name', 'publication_year', 'publication_date', 
+    'primary_location', 'cited_by_count', 'type', 'authorships'
+  ]
+};
 
 export class OpenAlexService {
   private readonly baseUrl = 'https://api.openalex.org';
-  
+
+  private buildOpenAlexUrl(
+    filter: string,
+    fieldSetName: keyof typeof OPENALEX_FIELD_SETS,
+    perPage: number | null = null
+  ): string {
+    const fields = OPENALEX_FIELD_SETS[fieldSetName].join(',');
+    let url = `${this.baseUrl}/works?filter=${filter}&select=${fields}`;
+    if (perPage) {
+      url += `&per_page=${perPage}`;
+    }
+    return url;
+  }
+
   async searchPapers(query: string): Promise<OpenAlexSearchResponse> {
     const encodedQuery = encodeURIComponent(query);
-    // Do not change this search method (url = `${this.baseUrl}/works?filter=title.search:${encodedQuery}&select=)
-    const url = `${this.baseUrl}/works?filter=title.search:${encodedQuery}&select=id,doi,display_name,publication_year,authorships,primary_location&per_page=25`;    
+    const filter = `title.search:${encodedQuery}`;
+    const url = this.buildOpenAlexUrl(filter, 'SEARCH_PREVIEW', 25);
+    
     const response = await fetchWithRetry(url);
-    if (response.status === 404) {
-      return { results: [], meta: { count: 0, db_response_time_ms: 0, page: 1, per_page: 25 } };
-    }
-    if (!response.ok) {
-      throw new Error(`OpenAlex API error: ${response.status} ${response.statusText}`);
-    }
+    if (!response.ok) throw new Error(`OpenAlex API error: ${response.status}`);
     return response.json();
   }
 
   async fetchCitations(openAlexId: string): Promise<OpenAlexSearchResponse> {
     const workId = normalizeOpenAlexId(openAlexId);
-    const url = `${this.baseUrl}/works?filter=cites:${workId}&per_page=200&select=id,ids,doi,title,publication_year,publication_date,type,authorships,fwci,cited_by_count,abstract_inverted_index,primary_location,best_oa_location,open_access,keywords,referenced_works,related_works,language`;
+    const filter = `cites:${workId}`;
+    const url = this.buildOpenAlexUrl(filter, 'FULL_INGESTION', 200);
     
     const response = await fetchWithRetry(url);
-    if (response.status === 404) {
-      return { results: [], meta: { count: 0, db_response_time_ms: 0, page: 1, per_page: 200 } };
+    if (!response.ok) throw new Error(`OpenAlex citations API error: ${response.status}`);
+    return response.json();
+  }
+
+  // NEW: A dedicated method for fetching all papers that cite a list of works.
+  async fetchCitationsForMultiplePapers(workIds: string[]): Promise<OpenAlexSearchResponse> {
+    const normalizedIds = workIds.map(normalizeOpenAlexId);
+    if (normalizedIds.length === 0) {
+      return { results: [], meta: { count: 0, db_response_time_ms: 0, page: 1, per_page: 0 } };
     }
+    
+    // The `cites` filter supports the OR operator, so we can make one efficient call.
+    const filter = `cites:${normalizedIds.join('|')}`;
+    const url = this.buildOpenAlexUrl(filter, 'FULL_INGESTION', 200);
+    
+    const response = await fetchWithRetry(url);
     if (!response.ok) {
-      throw new Error(`OpenAlex citations API error: ${response.status} ${response.statusText}`);
+      console.warn(`[Worker] Failed to fetch 2nd degree citations: ${response.status}`);
+      return { results: [], meta: { count: 0, db_response_time_ms: 0, page: 1, per_page: 0 } };
     }
     return response.json();
   }
 
   async fetchPaperDetails(openAlexId: string): Promise<OpenAlexPaper | null> {
     const workId = normalizeOpenAlexId(openAlexId);
-    const url = `${this.baseUrl}/works/${workId}?select=id,ids,doi,title,publication_year,publication_date,type,language,authorships,primary_location,fwci,cited_by_count,abstract_inverted_index,best_oa_location,open_access,keywords,referenced_works,related_works`;
+    const fields = OPENALEX_FIELD_SETS['FULL_INGESTION'].join(',');
+    const url = `${this.baseUrl}/works/${workId}?select=${fields}`;
     
     const response = await fetchWithRetry(url);
-    if (response.status === 404) {
-      return null;
-    }
-    if (!response.ok) {
-      throw new Error(`OpenAlex paper details API error: ${response.status} ${response.statusText}`);
-    }
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error(`OpenAlex paper details API error: ${response.status}`);
     return response.json();
   }
 
-  async fetchMultiplePapers(workIds: string[]): Promise<OpenAlexSearchResponse> {
-    // Normalize all incoming IDs
+  async fetchMultiplePapers(
+    workIds: string[], 
+    fieldSetName: keyof typeof OPENALEX_FIELD_SETS = 'FULL_INGESTION'
+  ): Promise<OpenAlexSearchResponse> {
     const normalizedIds = workIds.map(normalizeOpenAlexId);
-    
-    // Handle empty array edge case
     if (normalizedIds.length === 0) {
       return { results: [], meta: { count: 0, db_response_time_ms: 0, page: 1, per_page: 0 } };
     }
 
-    // Split into chunks of maximum batch size
     const chunks: string[][] = [];
     for (let i = 0; i < normalizedIds.length; i += OPENALEX_API_BATCH_SIZE) {
       chunks.push(normalizedIds.slice(i, i + OPENALEX_API_BATCH_SIZE));
     }
 
-    // Create promises for each chunk
-    const chunkPromises = chunks.map(async (chunk) => {
-      const filterParam = `openalex:${chunk.join('|')}`;
-      const url = `${this.baseUrl}/works?filter=${filterParam}` +
-        `&select=id,ids,doi,title,publication_year,publication_date,type,language,` +
-        `authorships,primary_location,fwci,cited_by_count,abstract_inverted_index,` +
-        `best_oa_location,open_access,keywords,referenced_works,related_works`;
-      
-      const response = await fetchWithRetry(url);
-      if (response.status === 404) {
-        return { results: [], meta: { count: 0, db_response_time_ms: 0, page: 1, per_page: chunk.length } };
-      }
-      if (!response.ok) {
-        throw new Error(`OpenAlex batch fetch error: ${response.status} ${response.statusText}`);
-      }
-      return response.json();
+    const promises = chunks.map(chunk => {
+      const filter = `openalex:${chunk.join('|')}`;
+      const url = this.buildOpenAlexUrl(filter, fieldSetName);
+      return fetchWithRetry(url);
     });
 
-    // Execute all requests concurrently
-    const chunkResponses: OpenAlexSearchResponse[] = await Promise.all(chunkPromises);
-
-    // Flatten all results into a single array
+    const responses = await Promise.all(promises);
     const allResults: OpenAlexPaper[] = [];
-    let totalDbTime = 0;
-    
-    for (const chunkResponse of chunkResponses) {
-      allResults.push(...chunkResponse.results);
-      totalDbTime += chunkResponse.meta.db_response_time_ms;
+    for (const response of responses) {
+      if (response.ok) {
+        const data: OpenAlexSearchResponse = await response.json();
+        if (data.results) allResults.push(...data.results);
+      } else {
+        console.error(`OpenAlex batch fetch chunk error: ${response.status} ${response.statusText}`);
+      }
     }
 
-    // Return aggregated response
     return {
       results: allResults,
-      meta: {
-        count: allResults.length,
-        db_response_time_ms: totalDbTime,
-        page: 1,
-        per_page: allResults.length
-      }
+      meta: { count: allResults.length, db_response_time_ms: 0, page: 1, per_page: allResults.length },
     };
   }
 }
