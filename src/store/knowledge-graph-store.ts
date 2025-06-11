@@ -1,3 +1,4 @@
+
 import { create } from 'zustand';
 
 // Define the interfaces for the knowledge graph data
@@ -121,14 +122,25 @@ export const useKnowledgeGraphStore = create<KnowledgeGraphStore>((set, get) => 
   })),
 
   setState: (data) => {
-    set({
+    // --- DEBUGGING LOGS ADDED ---
+    console.log(
+      `[Main-Trace | Step 3a] ZUSTAND-SETTER-ENTRY: Received paper_relationships with ${data.paper_relationships.length} items.`
+    );
+    
+    const newStateSlices = {
       papers: data.papers,
       authors: data.authors,
       institutions: data.institutions,
       authorships: data.authorships,
       paper_relationships: data.paper_relationships,
       external_id_index: data.external_id_index
-    });
+    };
+
+    console.log(
+      `[Main-Trace | Step 3b] ZUSTAND-SETTER-ACTION: Setting new state with ${newStateSlices.paper_relationships.length} paper_relationships.`
+    );
+
+    set(newStateSlices);
   },
 
   updatePaper: (id, changes) => set((state) => ({

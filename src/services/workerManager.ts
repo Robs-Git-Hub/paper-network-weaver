@@ -26,6 +26,7 @@ class WorkerManager {
 
   private handleWorkerMessage(event: MessageEvent<WorkerMessage>) {
     const { type, payload } = event.data;
+    // This existing log is helpful, so we'll keep it.
     console.log('[WorkerManager] Received message:', type, payload);
 
     switch (type) {
@@ -43,6 +44,10 @@ class WorkerManager {
         break;
 
       case 'graph/setState':
+        // --- DEBUGGING LOG ADDED ---
+        console.log(
+          `[Main-Trace | Step 2] WORKER-MESSAGE-RECEIVED: payload.data.paper_relationships has ${payload.data.paper_relationships.length} items.`
+        );
         this.store.getState().setState(payload.data);
         break;
 
@@ -112,9 +117,13 @@ class WorkerManager {
       throw new Error('Worker not initialized');
     }
 
-    // *** MODIFIED THIS BLOCK ***
     // Get the authoritative state from the main thread's store.
     const currentState = this.store.getState();
+
+    // --- DEBUGGING LOG ADDED ---
+    console.log(
+      `[Main-Trace | Step 4] PRE-POSTMESSAGE-TO-WORKER: Sending paper_relationships with ${currentState.paper_relationships.length} items.`
+    );
 
     this.worker.postMessage({
       type: 'graph/extend',

@@ -59,6 +59,13 @@ export function setupWorkerMessageHandler() {
             }
             
             console.log('--- [Worker] Phase A Complete. Posting initial graph to main thread. ---');
+            
+            // --- DEBUGGING LOG ADDED ---
+            console.log(
+              `[Worker-Trace | Step 1] PRE-POSTMESSAGE: state.paperRelationships has ${state.paperRelationships.length} items.`,
+              JSON.stringify(state.paperRelationships)
+            );
+            
             // Translate worker's camelCase to main thread's snake_case for posting
             utils.postMessage('graph/setState', {
               data: {
@@ -103,6 +110,11 @@ export function setupWorkerMessageHandler() {
         (async () => {
           try {
             if (payload) {
+              // --- DEBUGGING LOG ADDED ---
+              console.log(
+                `[Worker-Trace | Step 5] PHASE-C-RECEIVED: payload.paper_relationships has ${payload.paper_relationships.length} items.`
+              );
+
               console.log('[Worker] Synchronizing and translating state from main thread.');
               const currentState = getState();
               
