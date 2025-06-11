@@ -119,25 +119,39 @@ export async function fetchSecondDegreeCitations(
     .filter(rel => rel.relationship_type === 'cites' && rel.target_short_uid === state.masterPaperUid)
     .map(rel => rel.source_short_uid);
 
-  // *** ADD THIS FINAL DIAGNOSTIC LOG ***
-  console.log('[ULTIMATE DEBUG] Comparing data:', {
-    uidsToFind: firstDegreeCitationUids,
-    indexValuesSample: Object.values(state.externalIdIndex).slice(0, 10)
-  });
-  // ************************************
-
   if (firstDegreeCitationUids.length === 0) {
     console.log('[Worker] No 1st degree citations found, skipping 2nd degree fetch.');
     return;
   }
 
-  const openAlexIdsOfFirstDegreePapers = firstDegreeCitationUids.map(uid => {
-    const openAlexKey = Object.keys(state.externalIdIndex).find(key => key.startsWith('openalex:') && state.externalIdIndex[key] === uid);
-    return openAlexKey ? openAlexKey.split(':')[1] : null;
-  }).filter((id): id is string => id !== null);
+  // --- START: OPTIMIZED REVERSE LOOKUP ---
+  // Create a dedicated, temporary reverse-lookup map for efficiency and reliability.
+  // This maps our internal short_uid back to its OpenAlex ID.
+  const uidToOpenAlexIdMap: Record<string, string> = {};
+  for (const key in state.externalIdIndex) {
+    if (key.startsWith('openalex:')) {
+      const uid = state.externalIdIndex[key];
+      const openAlexId = key.substring('openalex:'.length);
+      uidToOpenAlexIdMap[uid] = openAlexId;
+    }
+  }
+
+  // Now, perform a fast and direct O(1) lookup for each UID.
+  const openAlexIdsOfFirstDegreePapers = firstDegreeCitationUids
+    .map(uid => uidToOpenAlexIdMap[uid])
+    .filter((id): id is string => id !== null && id !== undefined);
+  // --- END: OPTIMIZED REVERSE LOOKUP ---
+
+  // Your [ULTIMATE DEBUG] log can now be simplified or removed.
+  // This new version is much more robust.
+  console.log('[ULTIMATE DEBUG] Comparing data:', {
+    uidsToFind: firstDegreeCitationUids.length,
+    uidsFound: openAlexIdsOfFirstDegreePapers.length,
+    mapSampleSize: Object.keys(uidToOpenAlexIdMap).length
+  });
 
   if (openAlexIdsOfFirstDegreePapers.length === 0) {
-    console.log('[Worker] No OpenAlex IDs found for 1st degree citations.');
+    console.log('[Worker] No OpenAlex IDs found for 1st degree citations. This indicates a logic error in data indexing.');
     return;
   }
 
@@ -216,6 +230,8 @@ export async function fetchSecondDegreeCitations(
   }
 }
 
+// src/workers/graph-core/relationship-builder.ts
+
 export async function hydrateStubPapers(
   state: GraphState,
   utils: UtilityFunctions
@@ -223,32 +239,43 @@ export async function hydrateStubPapers(
   console.log('[Worker] Phase C, Step 9: Hydrating stub papers.');
   utils.postMessage('progress/update', { message: 'Hydrating stub papers...' });
 
-  const stubPapers = Object.values(state.papers).filter(paper => paper.is_stub);
-  if (stubPapers.length === 0) return;
+  const stubUids = Object.values(state.papers)
+    .filter(paper => paper.is_stub)
+    .map(paper => paper.short_uid);
 
-  const stubUidToOpenAlexId: Record<string, string> = {};
-  const openAlexIds = stubPapers.map(stub => {
-    const key = Object.keys(state.externalIdIndex).find(k => k.startsWith('openalex:') && state.externalIdIndex[k] === stub.short_uid);
-    if (key) {
-      const openAlexId = key.split(':')[1];
-      stubUidToOpenAlexId[stub.short_uid] = openAlexId;
-      return openAlexId;
+  if (stubUids.length === 0) return;
+
+  // --- START: OPTIMIZED REVERSE LOOKUP ---
+  const uidToOpenAlexIdMap: Record<string, string> = {};
+  for (const key in state.externalIdIndex) {
+    if (key.startsWith('openalex:')) {
+      const uid = state.externalIdIndex[key];
+      const openAlexId = key.substring('openalex:'.length);
+      uidToOpenAlexIdMap[uid] = openAlexId;
     }
-    return null;
-  }).filter((id): id is string => id !== null);
+  }
 
-  if (openAlexIds.length === 0) return;
+  const openAlexIdsToHydrate = stubUids
+    .map(uid => uidToOpenAlexIdMap[uid])
+    .filter((id): id is string => id !== null && id !== undefined);
+  // --- END: OPTIMIZED REVERSE LOOKUP ---
+
+  if (openAlexIdsToHydrate.length === 0) return;
 
   try {
-    const responseData = await openAlexService.fetchMultiplePapers(openAlexIds, 'FULL_INGESTION');
+    const responseData = await openAlexService.fetchMultiplePapers(openAlexIdsToHydrate, 'FULL_INGESTION');
     console.log(`[Worker] Hydrating ${responseData.results.length} stub papers.`);
     
+    // Create a reverse map from OpenAlex ID back to stub UID for the final loop
+    const openAlexIdToUidMap = Object.fromEntries(Object.entries(uidToOpenAlexIdMap).map(([uid, id]) => [id, uid]));
+
     for (const paperData of responseData.results) {
       const normalizedId = normalizeOpenAlexId(paperData.id);
-      const stubUid = Object.keys(stubUidToOpenAlexId).find(uid => stubUidToOpenAlexId[uid] === normalizedId);
+      const stubUid = openAlexIdToUidMap[normalizedId];
       
       if (!stubUid || !state.papers[stubUid]) continue;
       
+      // ... (rest of the function is identical)
       const updatedPaper: Paper = {
         ...state.papers[stubUid],
         title: paperData.title || paperData.display_name || state.papers[stubUid].title,
@@ -311,12 +338,17 @@ export async function hydrateMasterPaper(
   const masterPaper = state.papers[state.masterPaperUid];
   if (!masterPaper) return;
   
-  const openAlexKey = Object.keys(state.externalIdIndex).find(key => 
-    key.startsWith('openalex:') && state.externalIdIndex[key] === state.masterPaperUid
-  );
-  if (!openAlexKey) return;
-  
-  const openAlexId = openAlexKey.split(':')[1];
+  // --- START: OPTIMIZED REVERSE LOOKUP ---
+  let openAlexId: string | null = null;
+  for (const key in state.externalIdIndex) {
+    if (state.externalIdIndex[key] === state.masterPaperUid && key.startsWith('openalex:')) {
+      openAlexId = key.substring('openalex:'.length);
+      break; // Found it, no need to search further
+    }
+  }
+  // --- END: OPTIMIZED REVERSE LOOKUP ---
+
+  if (!openAlexId) return;
   
   try {
     console.log('[Worker] Phase B, Step 4: Hydrating Master Paper from OpenAlex.');
@@ -325,6 +357,7 @@ export async function hydrateMasterPaper(
     const data = await openAlexService.fetchPaperDetails(openAlexId);
     if (!data) return;
     
+    // ... (rest of the function is identical)
     const updatedPaper: Paper = {
       ...masterPaper,
       title: data.title || data.display_name || masterPaper.title,
