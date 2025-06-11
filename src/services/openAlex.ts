@@ -50,19 +50,22 @@ export class OpenAlexService {
     return url;
   }
 
-  // --- NEW HELPER FOR PAGINATION ---
+  // --- REFACTORED FOR PAGINATION CAP ---
   private async fetchAllPages(initialUrl: string): Promise<OpenAlexPaper[]> {
     let allResults: OpenAlexPaper[] = [];
-    let nextCursor: string | null = '*'; // Use '*' for the first request
-    let currentUrl = initialUrl;
+    let nextCursor: string | null = '*';
+    
+    // --- THIS IS THE FIX ---
+    const MAX_PAGES = 5; // 1 initial call + 4 next_cursor calls
+    let pagesFetched = 0;
 
-    while (nextCursor) {
-      const urlWithCursor = `${currentUrl}&cursor=${nextCursor}`;
+    while (nextCursor && pagesFetched < MAX_PAGES) {
+      const urlWithCursor = `${initialUrl}&cursor=${nextCursor}`;
       const response = await fetchWithRetry(urlWithCursor);
 
       if (!response.ok) {
-        console.warn(`[Worker] A page failed during pagination for ${currentUrl}: ${response.status}`);
-        break; // Exit loop on page failure
+        console.warn(`[Worker] A page failed during pagination for ${initialUrl}: ${response.status}`);
+        break; 
       }
 
       const data: OpenAlexSearchResponse = await response.json();
@@ -70,7 +73,13 @@ export class OpenAlexService {
         allResults.push(...data.results);
       }
       
+      pagesFetched++;
       nextCursor = data.meta.next_cursor;
+    }
+
+    // Log a warning if we stopped because of the cap, not because we ran out of results.
+    if (nextCursor) {
+      console.warn(`[API] Pagination capped at ${MAX_PAGES} pages for URL: ${initialUrl}. More results may be available.`);
     }
 
     return allResults;
@@ -86,7 +95,6 @@ export class OpenAlexService {
     return response.json();
   }
 
-  // --- REFACTORED FOR PAGINATION ---
   async fetchCitations(openAlexId: string): Promise<OpenAlexSearchResponse> {
     const workId = normalizeOpenAlexId(openAlexId);
     const filter = `cites:${workId}`;
@@ -100,7 +108,6 @@ export class OpenAlexService {
     };
   }
 
-  // --- REFACTORED FOR BATCHING & PAGINATION ---
   async fetchCitationsForMultiplePapers(workIds: string[]): Promise<OpenAlexSearchResponse> {
     const normalizedIds = workIds.map(normalizeOpenAlexId);
     if (normalizedIds.length === 0) {
@@ -112,7 +119,7 @@ export class OpenAlexService {
     const promises = idChunks.map(chunk => {
       const filter = `cites:${chunk.join('|')}`;
       const initialUrl = this.buildOpenAlexUrl(filter, 'FULL_INGESTION', 200);
-      return this.fetchAllPages(initialUrl); // Use the pagination helper for each chunk
+      return this.fetchAllPages(initialUrl);
     });
 
     const resultsFromAllChunks = await Promise.all(promises);
