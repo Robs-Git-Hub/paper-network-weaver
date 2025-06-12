@@ -21,7 +21,7 @@ export const MainAnalysisView: React.FC<MainAnalysisViewProps> = ({
 }) => {
   const { papers, app_status, setAppStatus } = useKnowledgeGraphStore();
   
-  // Find the master paper (the one that's not a stub and has the most relationships)
+  // Find the master paper (the one that's not a stub)
   const masterPaper = Object.values(papers).find(paper => !paper.is_stub);
   
   console.log('[MainAnalysisView] Master paper:', masterPaper);
@@ -43,7 +43,10 @@ export const MainAnalysisView: React.FC<MainAnalysisViewProps> = ({
     (!paper.is_stub || (paper.relationship_tags && paper.relationship_tags.length > 0))
   );
   
-  console.log('[MainAnalysisView] Citation papers:', citationPapers.length);
+  console.log('[MainAnalysisView] Citation papers raw count:', citationPapers.length);
+
+  // ADDED FOR DEBUGGING: This log will confirm that the component is re-rendering with the growing list of papers.
+  console.log('[MainAnalysisView] Rendering with citation paper count:', citationPapers.length);
 
   const renderCurrentView = () => {
     switch (currentView) {
