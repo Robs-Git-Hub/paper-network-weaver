@@ -41,13 +41,20 @@ export async function enrichMasterPaperWithSemanticScholar(
     
     if (Object.keys(updates).length > 0) {
       getGraphState().papers[masterPaperUid] = { ...currentMasterPaper, ...updates };
+      // Stream the update for the master paper
+      utils.postMessage('papers/updateOne', { id: masterPaperUid, changes: updates });
     }
     
+    // --- STREAMING CHANGE: Stream new external IDs immediately ---
     if (ssData.paperId) {
+      const key = `ss:${ssData.paperId}`;
       utils.addToExternalIndex('ss', ssData.paperId, masterPaperUid);
+      utils.postMessage('graph/setExternalId', { key, uid: masterPaperUid });
     }
     if (ssData.corpusId) {
+      const key = `corpusId:${ssData.corpusId.toString()}`;
       utils.addToExternalIndex('corpusId', ssData.corpusId.toString(), masterPaperUid);
+      utils.postMessage('graph/setExternalId', { key, uid: masterPaperUid });
     }
     
     await processSemanticScholarRelationships(ssData, getGraphState, utils);

@@ -23,6 +23,9 @@ export function setupWorkerMessageHandler() {
             
             const utils = getUtilityFunctions();
             
+            // --- STREAMING CHANGE: Tell the main thread to reset its state ---
+            utils.postMessage('graph/reset', {});
+
             setStubCreationThreshold(payload.stub_creation_threshold || 3);
             
             utils.postMessage('app_status/update', { state: 'loading', message: 'Processing master paper...' });
@@ -41,7 +44,8 @@ export function setupWorkerMessageHandler() {
               initialState.papers, 
               initialState.authors, 
               initialState.institutions, 
-              initialState.authorships
+              initialState.authorships,
+              utils // Pass utils down to enable streaming
             );
             setMasterPaperUid(masterUid);
             console.log('[Worker] Phase A, Step 1: Master Paper processed.');
@@ -52,19 +56,9 @@ export function setupWorkerMessageHandler() {
               await enrichMasterPaperWithSemanticScholar(getState, utils);
             }
             
-            console.log('--- [Worker] Phase A Complete. Posting initial graph to main thread. ---');
+            console.log('--- [Worker] Phase A Complete. All initial data has been streamed. ---');
             
-            const finalState = getState();
-            utils.postMessage('graph/setState', {
-              data: {
-                papers: finalState.papers,
-                authors: finalState.authors,
-                institutions: finalState.institutions,
-                authorships: finalState.authorships,
-                paper_relationships: finalState.paperRelationships,
-                external_id_index: finalState.externalIdIndex
-              }
-            });
+            // --- STREAMING CHANGE: THE LARGE, BLOCKING `graph/setState` MESSAGE HAS BEEN REMOVED ---
             
             console.log('--- [Worker] Starting Phase B: Background Enrichment. ---');
             utils.postMessage('app_status/update', { state: 'enriching', message: null });

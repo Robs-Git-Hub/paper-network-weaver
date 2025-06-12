@@ -26,67 +26,77 @@ class WorkerManager {
 
   private handleWorkerMessage(event: MessageEvent<WorkerMessage>) {
     const { type, payload } = event.data;
-    // This existing log is helpful, so we'll keep it.
+    // This log is helpful for debugging the stream of messages from the worker.
     console.log('[WorkerManager] Received message:', type, payload);
 
+    const storeActions = this.store.getState();
+
     switch (type) {
+      // --- START: NEW STREAMING HANDLERS ---
+      case 'graph/reset':
+        storeActions.resetGraph();
+        break;
+      case 'graph/addPaper':
+        storeActions.addPaper(payload.paper);
+        break;
+      case 'graph/addAuthor':
+        storeActions.addAuthor(payload.author);
+        break;
+      case 'graph/addInstitution':
+        storeActions.addInstitution(payload.institution);
+        break;
+      case 'graph/addAuthorship':
+        storeActions.addAuthorship(payload.authorship);
+        break;
+      case 'graph/addRelationship':
+        storeActions.addRelationship(payload.relationship);
+        break;
+      case 'graph/setExternalId':
+        storeActions.setExternalId(payload.key, payload.uid);
+        break;
+      // --- END: NEW STREAMING HANDLERS ---
+
       case 'progress/update':
-        this.store.getState().setAppStatus({ 
-          message: payload.message 
-        });
+        storeActions.setAppStatus({ message: payload.message });
         break;
 
       case 'app_status/update':
-        this.store.getState().setAppStatus({ 
-          state: payload.state,
-          message: payload.message 
-        });
+        storeActions.setAppStatus({ state: payload.state, message: payload.message });
         break;
-
-      case 'graph/setState':
-        // --- DEBUGGING LOG ADDED ---
-        console.log(
-          `[Main-Trace | Step 2] WORKER-MESSAGE-RECEIVED: payload.data.paper_relationships has ${payload.data.paper_relationships.length} items.`
-        );
-        this.store.getState().setState(payload.data);
-        break;
+      
+      // `graph/setState` is now removed, as it's been replaced by the streaming handlers.
 
       case 'papers/updateOne':
-        this.store.getState().updatePaper(payload.id, payload.changes);
+        storeActions.updatePaper(payload.id, payload.changes);
         break;
 
-      case 'graph/addNodes':
-        this.store.getState().addNodes(payload.data);
+      case 'graph/addNodes': // Primarily used by the 'extend' phase
+        storeActions.addNodes(payload.data);
         break;
 
       case 'graph/applyAuthorMerge':
-        this.store.getState().applyAuthorMerge(
-          payload.updates,
-          payload.deletions
-        );
+        storeActions.applyAuthorMerge(payload.updates, payload.deletions);
         break;
 
       case 'error/fatal':
-        this.store.getState().setAppStatus({
+        storeActions.setAppStatus({
           state: 'error',
           message: payload.message
         });
         break;
 
       case 'enrichment/complete':
-        // --- THIS IS THE FIX ---
-        // When Phase B is confirmed complete, we now trigger Phase C.
+        // When Phase B is confirmed complete, we trigger Phase C.
         console.log('[WorkerManager] Phase B complete. Triggering Phase C (extendGraph).');
         this.extendGraph();
         break;
 
       case 'warning/nonCritical':
-        // Could show a toast notification
         console.warn('[Worker] Non-critical warning:', payload.message);
         break;
 
       default:
-        console.warn('[WorkerManager] Unknown message type:', type);
+        console.warn(`[WorkerManager] Received unknown message type: ${type}`);
     }
   }
 
@@ -100,7 +110,10 @@ class WorkerManager {
 
   processMasterPaper(paper: any, stubCreationThreshold = 3) {
     if (!this.worker) {
-      throw new Error('Worker not initialized');
+      this.initialize();
+      if (!this.worker) {
+          throw new Error('Worker initialization failed');
+      }
     }
 
     this.worker.postMessage({
@@ -116,18 +129,9 @@ class WorkerManager {
     if (!this.worker) {
       throw new Error('Worker not initialized');
     }
-
-    // Get the authoritative state from the main thread's store.
     const currentState = this.store.getState();
-
-    // --- DEBUGGING LOG ADDED ---
-    console.log(
-      `[Main-Trace | Step 4] PRE-POSTMESSAGE-TO-WORKER: Sending paper_relationships with ${currentState.paper_relationships.length} items.`
-    );
-
     this.worker.postMessage({
       type: 'graph/extend',
-      // Pass the state to the worker to ensure it's not stale.
       payload: {
         papers: currentState.papers,
         authors: currentState.authors,

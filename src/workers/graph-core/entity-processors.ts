@@ -2,10 +2,9 @@
 import { reconstructAbstract, extractKeywords, normalizeDoi, generateShortUid } from '../../utils/data-transformers';
 import { normalizeOpenAlexId } from '../../services/openAlex-util';
 import { addToExternalIndex, findByExternalId } from './utils';
-import type { Paper, Author, Institution, Authorship } from './types';
+import type { Paper, Author, Institution, Authorship, UtilityFunctions } from './types';
 
 // Entity processing functions
-// Will contain: processOpenAlexPaper, processOpenAlexAuthor, processOpenAlexInstitution
 
 export async function processOpenAlexPaper(
   paperData: any, 
@@ -13,7 +12,8 @@ export async function processOpenAlexPaper(
   papers: Record<string, Paper>,
   authors: Record<string, Author>,
   institutions: Record<string, Institution>,
-  authorships: Record<string, Authorship>
+  authorships: Record<string, Authorship>,
+  utils: UtilityFunctions // Added utils to post messages
 ): Promise<string> {
   let paperUid: string | null = null;
 
@@ -49,20 +49,34 @@ export async function processOpenAlexPaper(
       relationship_tags: []
     };
     papers[paperUid] = newPaper;
+    // --- STREAMING CHANGE: Send the new paper immediately ---
+    utils.postMessage('graph/addPaper', { paper: newPaper });
   } else {
+    // If we are "upgrading" a stub to a full paper
     if (!isStub && papers[paperUid].is_stub) {
       papers[paperUid].is_stub = false;
+      // Note: an update message can be sent if needed
+      // utils.postMessage('papers/updateOne', { id: paperUid, changes: { is_stub: false } });
     }
   }
 
-  // Step 3: Ensure ALL available IDs are in the index.
+  // Step 3: Ensure ALL available IDs are in the index and streamed.
   if (paperData.id) {
-    addToExternalIndex('openalex', paperData.id, paperUid);
+    const cleanId = normalizeOpenAlexId(paperData.id);
+    const key = `openalex:${cleanId}`;
+    if (!findByExternalId('openalex', cleanId)) {
+        addToExternalIndex('openalex', cleanId, paperUid);
+        utils.postMessage('graph/setExternalId', { key, uid: paperUid });
+    }
   }
   if (paperData.doi) {
     const normalizedDoi = normalizeDoi(paperData.doi);
     if (normalizedDoi) {
-      addToExternalIndex('doi', normalizedDoi, paperUid);
+      const key = `doi:${normalizedDoi}`;
+      if(!findByExternalId('doi', normalizedDoi)) {
+          addToExternalIndex('doi', normalizedDoi, paperUid);
+          utils.postMessage('graph/setExternalId', { key, uid: paperUid });
+      }
     }
   }
 
@@ -70,11 +84,12 @@ export async function processOpenAlexPaper(
   if (!isStub && paperData.authorships) {
     for (let i = 0; i < paperData.authorships.length; i++) {
       const authorship = paperData.authorships[i];
-      const authorUid = await processOpenAlexAuthor(authorship.author, isStub, authors);
+      // Pass utils down to the next processor
+      const authorUid = await processOpenAlexAuthor(authorship.author, isStub, authors, utils);
       
       const authorshipKey = `${paperUid}_${authorUid}`;
       if (!authorships[authorshipKey]) {
-        authorships[authorshipKey] = {
+        const newAuthorship: Authorship = {
           paper_short_uid: paperUid,
           author_short_uid: authorUid,
           author_position: i,
@@ -82,13 +97,18 @@ export async function processOpenAlexPaper(
           raw_author_name: authorship.raw_author_name || null,
           institution_uids: []
         };
-
+        
         if (authorship.institutions) {
           for (const inst of authorship.institutions) {
-            const instUid = await processOpenAlexInstitution(inst, institutions);
-            authorships[authorshipKey].institution_uids.push(instUid);
+            // Pass utils down
+            const instUid = await processOpenAlexInstitution(inst, institutions, utils);
+            newAuthorship.institution_uids.push(instUid);
           }
         }
+        
+        authorships[authorshipKey] = newAuthorship;
+        // --- STREAMING CHANGE: Send the new authorship immediately ---
+        utils.postMessage('graph/addAuthorship', { authorship: newAuthorship });
       }
     }
   }
@@ -99,7 +119,8 @@ export async function processOpenAlexPaper(
 export async function processOpenAlexAuthor(
   authorData: any, 
   isStub = false,
-  authors: Record<string, Author>
+  authors: Record<string, Author>,
+  utils: UtilityFunctions // Added utils
 ): Promise<string> {
   if (authorData.id) {
     const cleanId = normalizeOpenAlexId(authorData.id);
@@ -109,18 +130,21 @@ export async function processOpenAlexAuthor(
 
   const authorUid = generateShortUid();
   
-  const author: Author = {
+  const newAuthor: Author = {
     short_uid: authorUid,
     clean_name: authorData.display_name || 'Unknown Author',
     orcid: authorData.orcid || null,
     is_stub: isStub
   };
 
-  authors[authorUid] = author;
+  authors[authorUid] = newAuthor;
+  utils.postMessage('graph/addAuthor', { author: newAuthor });
 
   if (authorData.id) {
     const cleanId = normalizeOpenAlexId(authorData.id);
+    const key = `openalex_author:${cleanId}`;
     addToExternalIndex('openalex_author', cleanId, authorUid);
+    utils.postMessage('graph/setExternalId', { key, uid: authorUid });
   }
 
   return authorUid;
@@ -128,7 +152,8 @@ export async function processOpenAlexAuthor(
 
 export async function processOpenAlexInstitution(
   instData: any,
-  institutions: Record<string, Institution>
+  institutions: Record<string, Institution>,
+  utils: UtilityFunctions // Added utils
 ): Promise<string> {
   if (instData.id) {
     const cleanId = normalizeOpenAlexId(instData.id);
@@ -138,7 +163,7 @@ export async function processOpenAlexInstitution(
 
   const instUid = generateShortUid();
   
-  const institution: Institution = {
+  const newInstitution: Institution = {
     short_uid: instUid,
     ror_id: instData.ror || null,
     display_name: instData.display_name || 'Unknown Institution',
@@ -146,11 +171,14 @@ export async function processOpenAlexInstitution(
     type: instData.type || null
   };
 
-  institutions[instUid] = institution;
+  institutions[instUid] = newInstitution;
+  utils.postMessage('graph/addInstitution', { institution: newInstitution });
 
   if (instData.id) {
     const cleanId = normalizeOpenAlexId(instData.id);
+    const key = `openalex_institution:${cleanId}`;
     addToExternalIndex('openalex_institution', cleanId, instUid);
+    utils.postMessage('graph/setExternalId', { key, uid: instUid });
   }
 
   return instUid;

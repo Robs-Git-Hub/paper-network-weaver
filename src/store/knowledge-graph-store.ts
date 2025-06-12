@@ -48,7 +48,7 @@ export interface PaperRelationship {
   source_short_uid: string;
   target_short_uid: string;
   relationship_type: 'cites' | 'similar';
-  tag?: 'referenced_by_1st_degree';
+  tag?: 'referenced_by_1st_degree' | string;
 }
 
 export interface ExternalIdType {
@@ -79,14 +79,16 @@ interface KnowledgeGraphStore {
 
   // === ACTIONS ===
   setAppStatus: (status: Partial<AppStatus>) => void;
-  setState: (data: {
-    papers: Record<string, Paper>;
-    authors: Record<string, Author>;
-    institutions: Record<string, Institution>;
-    authorships: Record<string, Authorship>;
-    paper_relationships: PaperRelationship[];
-    external_id_index: Record<string, string>;
-  }) => void;
+  
+  // New actions to handle streaming data
+  resetGraph: () => void;
+  addPaper: (paper: Paper) => void;
+  addAuthor: (author: Author) => void;
+  addInstitution: (institution: Institution) => void;
+  addAuthorship: (authorship: Authorship) => void;
+  addRelationship: (relationship: PaperRelationship) => void;
+  setExternalId: (key: string, uid: string) => void;
+
   updatePaper: (id: string, changes: Partial<Paper>) => void;
   addNodes: (data: {
     papers?: Record<string, Paper>;
@@ -121,27 +123,52 @@ export const useKnowledgeGraphStore = create<KnowledgeGraphStore>((set, get) => 
     app_status: { ...state.app_status, ...status }
   })),
 
-  setState: (data) => {
-    // --- DEBUGGING LOGS ADDED ---
-    console.log(
-      `[Main-Trace | Step 3a] ZUSTAND-SETTER-ENTRY: Received paper_relationships with ${data.paper_relationships.length} items.`
-    );
-    
-    const newStateSlices = {
-      papers: data.papers,
-      authors: data.authors,
-      institutions: data.institutions,
-      authorships: data.authorships,
-      paper_relationships: data.paper_relationships,
-      external_id_index: data.external_id_index
-    };
+  // --- START OF NEW STREAMING ACTIONS ---
+  
+  // Action to clear the entire graph state, called before a new analysis begins.
+  resetGraph: () => set({
+    papers: {},
+    authors: {},
+    institutions: {},
+    authorships: {},
+    paper_relationships: [],
+    external_id_index: {},
+  }),
 
-    console.log(
-      `[Main-Trace | Step 3b] ZUSTAND-SETTER-ACTION: Setting new state with ${newStateSlices.paper_relationships.length} paper_relationships.`
-    );
+  // Adds a single paper to the store.
+  addPaper: (paper) => set((state) => ({
+    papers: { ...state.papers, [paper.short_uid]: paper }
+  })),
+  
+  // Adds a single author to the store.
+  addAuthor: (author) => set((state) => ({
+    authors: { ...state.authors, [author.short_uid]: author }
+  })),
 
-    set(newStateSlices);
+  // Adds a single institution to the store.
+  addInstitution: (institution) => set((state) => ({
+    institutions: { ...state.institutions, [institution.short_uid]: institution }
+  })),
+
+  // Adds a single authorship to the store.
+  addAuthorship: (authorship) => {
+    const key = `${authorship.paper_short_uid}_${authorship.author_short_uid}`;
+    set((state) => ({
+      authorships: { ...state.authorships, [key]: authorship }
+    }));
   },
+
+  // Adds a single paper relationship to the store.
+  addRelationship: (relationship) => set((state) => ({
+    paper_relationships: [...state.paper_relationships, relationship]
+  })),
+  
+  // Adds a single external ID mapping to the index.
+  setExternalId: (key, uid) => set((state) => ({
+    external_id_index: { ...state.external_id_index, [key]: uid }
+  })),
+
+  // --- END OF NEW STREAMING ACTIONS ---
 
   updatePaper: (id, changes) => set((state) => ({
     papers: {
