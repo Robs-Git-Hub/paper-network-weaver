@@ -30,6 +30,11 @@ export async function fetchFirstDegreeCitations(
     
     if (state.papers[paperUid] && !state.papers[paperUid].relationship_tags.includes('1st_degree')) {
       state.papers[paperUid].relationship_tags.push('1st_degree');
+      // --- BUG FIX: Send an update with the new tags ---
+      utils.postMessage('papers/updateOne', {
+        id: paperUid,
+        changes: { relationship_tags: [...state.papers[paperUid].relationship_tags] }
+      });
     }
     
     const relationship: PaperRelationship = {
@@ -85,6 +90,11 @@ export async function createStubsFromOpenAlexIds(
     
     if (tag && state.papers[stubUid] && !state.papers[stubUid].relationship_tags.includes(tag)) {
       state.papers[stubUid].relationship_tags.push(tag);
+      // --- BUG FIX: Send an update with the new tags ---
+      utils.postMessage('papers/updateOne', {
+        id: stubUid,
+        changes: { relationship_tags: [...state.papers[stubUid].relationship_tags] }
+      });
     }
     
     const relationship: PaperRelationship = {
@@ -153,6 +163,11 @@ export async function fetchSecondDegreeCitations(
       
       if (currentState.papers[paperUid] && !currentState.papers[paperUid].relationship_tags.includes('2nd_degree')) {
         currentState.papers[paperUid].relationship_tags.push('2nd_degree');
+        // --- BUG FIX: Send an update with the new tags ---
+        utils.postMessage('papers/updateOne', {
+          id: paperUid,
+          changes: { relationship_tags: [...currentState.papers[paperUid].relationship_tags] }
+        });
       }
       
       (paperData.referenced_works || []).forEach(refWorkUrl => {
@@ -246,7 +261,6 @@ export async function hydrateStubPapers(
       if (paperData.authorships) {
         for (let i = 0; i < paperData.authorships.length; i++) {
           const authorship = paperData.authorships[i];
-          // --- FIX: Pass 'utils' to processOpenAlexAuthor ---
           const authorUid = await processOpenAlexAuthor(authorship.author, false, getGraphState().authors, utils);
           
           const authorshipKey = `${stubUid}_${authorUid}`;
@@ -261,7 +275,6 @@ export async function hydrateStubPapers(
           
           if (authorship.institutions) {
             for (const inst of authorship.institutions) {
-              // --- FIX: Pass 'utils' to processOpenAlexInstitution ---
               const instUid = await processOpenAlexInstitution(inst, getGraphState().institutions, utils);
               newAuthorship.institution_uids.push(instUid);
             }

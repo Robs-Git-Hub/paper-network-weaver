@@ -17,14 +17,6 @@ export const UnifiedCitationsTable: React.FC<UnifiedCitationsTableProps> = ({ pa
     filterCounts
   } = useRelationshipFilters(papers);
 
-  if (papers.length === 0) {
-    return (
-      <div className="text-center py-8">
-        <p className="text-muted-foreground">No citation papers found</p>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       <FilterControls
@@ -39,7 +31,12 @@ export const UnifiedCitationsTable: React.FC<UnifiedCitationsTableProps> = ({ pa
         <CitationsTable papers={filteredPapers} showRelationshipTags />
       ) : (
         <div className="text-center py-8">
-          <p className="text-muted-foreground">No papers match the selected filters</p>
+          <p className="text-muted-foreground">
+            {activeFilters.length > 0 && papers.length > 0
+              ? 'No papers match the selected filters'
+              : 'Loading or no related papers found.'
+            }
+          </p>
         </div>
       )}
     </div>

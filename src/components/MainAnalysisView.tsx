@@ -45,9 +45,6 @@ export const MainAnalysisView: React.FC<MainAnalysisViewProps> = ({
   
   console.log('[MainAnalysisView] Citation papers raw count:', citationPapers.length);
 
-  // ADDED FOR DEBUGGING: This log will confirm that the component is re-rendering with the growing list of papers.
-  console.log('[MainAnalysisView] Rendering with citation paper count:', citationPapers.length);
-
   const renderCurrentView = () => {
     switch (currentView) {
       case 'Table':
