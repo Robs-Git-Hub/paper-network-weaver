@@ -12,11 +12,9 @@ import type { WorkerMessage } from './types';
 
 // --- BATCHING LOGIC START ---
 
-// A queue to hold messages before sending them in a batch.
 let messageQueue: WorkerMessage[] = [];
 let batchIntervalId: ReturnType<typeof setInterval> | null = null;
 
-// These message types are safe to batch. Others (like status updates) should be sent immediately.
 const BATCHABLE_TYPES = [
   'graph/reset',
   'graph/addPaper',
@@ -30,24 +28,14 @@ const BATCHABLE_TYPES = [
   'graph/applyAuthorMerge',
 ];
 
-/**
- * Sends the current message queue to the main thread and clears it.
- */
 function flushQueue() {
   if (messageQueue.length > 0) {
-    // DIAGNOSTIC: Log the batch being sent from the worker.
     console.log(`[Worker] Flushing message queue with ${messageQueue.length} items.`);
     self.postMessage(messageQueue);
     messageQueue = [];
   }
 }
 
-/**
- * A replacement for the original postMessage utility.
- * It pushes batchable messages to a queue and sends non-batchable messages immediately.
- * @param type The message type.
- * @param payload The message payload.
- */
 function postMessageWithBatching(type: string, payload: any) {
   if (BATCHABLE_TYPES.includes(type)) {
     messageQueue.push({ type, payload });
@@ -57,44 +45,44 @@ function postMessageWithBatching(type: string, payload: any) {
   }
 }
 
-/**
- * Starts the batching interval.
- */
 function startBatching() {
   if (batchIntervalId === null) {
-    batchIntervalId = setInterval(flushQueue, 250); // Flush every 250ms
+    batchIntervalId = setInterval(flushQueue, 250);
   }
 }
 
-/**
- * Stops the batching interval and performs a final flush to send any remaining messages.
- */
 function stopBatching() {
   if (batchIntervalId !== null) {
     clearInterval(batchIntervalId);
     batchIntervalId = null;
   }
-  flushQueue(); // Final flush
+  flushQueue(); // Final flush to send any remaining messages.
 }
 
 // --- BATCHING LOGIC END ---
-
 
 export function setupWorkerMessageHandler() {
   self.addEventListener('message', (event: MessageEvent<WorkerMessage>) => {
     const { type, payload } = event.data;
 
+    // This function creates a utils object with our batching logic.
+    const getEnhancedUtils = () => {
+      const originalUtils = getUtilityFunctions();
+      return {
+        ...originalUtils,
+        postMessage: postMessageWithBatching,
+      };
+    };
+
     switch (type) {
       case 'graph/processMasterPaper':
         (async () => {
-          // The new utils object uses our batching postMessage function.
-          const utils = { postMessage: postMessageWithBatching };
+          const utils = getEnhancedUtils();
           try {
             console.log("--- [Worker] Received 'graph/processMasterPaper'. Starting Phase A. ---");
             resetState();
             startBatching();
             
-            // --- STREAMING CHANGE: Tell the main thread to reset its state ---
             utils.postMessage('graph/reset', {});
 
             setStubCreationThreshold(payload.stub_creation_threshold || 3);
@@ -116,14 +104,13 @@ export function setupWorkerMessageHandler() {
               initialState.authors, 
               initialState.institutions, 
               initialState.authorships,
-              utils // Pass utils with batching down to enable streaming
+              utils
             );
             setMasterPaperUid(masterUid);
             console.log('[Worker] Phase A, Step 1: Master Paper processed.');
             
             if (cleanMasterPaper.id) {
               await fetchFirstDegreeCitations(cleanMasterPaper.id, getState, utils);              
-              
               await enrichMasterPaperWithSemanticScholar(getState, utils);
             }
             
@@ -144,7 +131,6 @@ export function setupWorkerMessageHandler() {
               message: `Worker error: ${error instanceof Error ? error.message : 'Unknown error'}` 
             });
           } finally {
-            // Ensure all messages are sent and the interval is cleaned up.
             stopBatching();
           }
         })();
@@ -154,7 +140,7 @@ export function setupWorkerMessageHandler() {
         console.log('--- [Worker] Received "graph/extend". Starting Phase C. ---');
         
         (async () => {
-          const utils = { postMessage: postMessageWithBatching };
+          const utils = getEnhancedUtils();
           try {
             startBatching();
             if (payload) {
@@ -188,7 +174,6 @@ export function setupWorkerMessageHandler() {
               message: `Extension error: ${error instanceof Error ? error.message : 'Unknown error'}` 
             });
           } finally {
-            // Ensure all messages are sent and the interval is cleaned up.
             stopBatching();
           }
         })();

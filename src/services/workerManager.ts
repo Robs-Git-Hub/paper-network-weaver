@@ -60,9 +60,17 @@ class WorkerManager {
   }
 
   private handleWorkerMessage(event: MessageEvent<WorkerMessage | WorkerMessage[]>) {
-    // DIAGNOSTIC: Log whatever we receive from the worker. We expect to see arrays now.
-    console.log('[WorkerManager] Received data from worker:', event.data);
+    // DIAGNOSTIC: Log the type and size of the incoming message/batch.
+    if (Array.isArray(event.data)) {
+      console.log(`[WorkerManager] Received message batch of size ${event.data.length}.`);
+    } else if (event.data.type) {
+      // For single messages, log their type for clarity.
+      if (!['progress/update'].includes(event.data.type)) { // Avoid overly noisy logs
+        console.log(`[WorkerManager] Received single message of type: ${event.data.type}`);
+      }
+    }
 
+    // The worker can send a single message or an array of batched messages.
     const messages = Array.isArray(event.data) ? event.data : [event.data];
 
     for (const message of messages) {
