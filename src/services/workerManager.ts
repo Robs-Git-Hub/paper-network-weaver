@@ -59,57 +59,67 @@ class WorkerManager {
     }
   }
 
-  private handleWorkerMessage(event: MessageEvent<WorkerMessage>) {
-    const message = event.data;
-    const { type, payload } = message;
+  private handleWorkerMessage(event: MessageEvent<WorkerMessage | WorkerMessage[]>) {
+    // DIAGNOSTIC: Log whatever we receive from the worker. We expect to see arrays now.
+    console.log('[WorkerManager] Received data from worker:', event.data);
 
-    const BATCHABLE_TYPES = [
-      'graph/reset',
-      'graph/addPaper',
-      'graph/addAuthor',
-      'graph/addInstitution',
-      'graph/addAuthorship',
-      'graph/addRelationship',
-      'graph/setExternalId',
-      'papers/updateOne',
-      'graph/addNodes',
-      'graph/applyAuthorMerge',
-    ];
+    const messages = Array.isArray(event.data) ? event.data : [event.data];
 
-    if (BATCHABLE_TYPES.includes(type)) {
-      this.messageQueue.push(message);
-      this.scheduleUpdate();
-    } else {
-      // Process non-batchable, low-frequency messages immediately.
-      const storeActions = this.store.getState();
-      switch (type) {
-        case 'progress/update':
-          storeActions.setAppStatus({ message: payload.message });
-          break;
+    for (const message of messages) {
+      const { type, payload } = message;
 
-        case 'app_status/update':
-          storeActions.setAppStatus({ state: payload.state, message: payload.message });
-          break;
-        
-        case 'error/fatal':
-          storeActions.setAppStatus({
-            state: 'error',
-            message: payload.message
-          });
-          break;
+      const BATCHABLE_TYPES = [
+        'graph/reset',
+        'graph/addPaper',
+        'graph/addAuthor',
+        'graph/addInstitution',
+        'graph/addAuthorship',
+        'graph/addRelationship',
+        'graph/setExternalId',
+        'papers/updateOne',
+        'graph/addNodes',
+        'graph/applyAuthorMerge',
+      ];
 
-        case 'enrichment/complete':
-          console.log('[WorkerManager] Phase B complete. Triggering Phase C (extendGraph).');
-          this.extendGraph();
-          break;
+      if (BATCHABLE_TYPES.includes(type)) {
+        this.messageQueue.push(message);
+      } else {
+        // Process non-batchable, low-frequency messages immediately.
+        const storeActions = this.store.getState();
+        switch (type) {
+          case 'progress/update':
+            storeActions.setAppStatus({ message: payload.message });
+            break;
 
-        case 'warning/nonCritical':
-          console.warn('[Worker] Non-critical warning:', payload.message);
-          break;
+          case 'app_status/update':
+            storeActions.setAppStatus({ state: payload.state, message: payload.message });
+            break;
+          
+          case 'error/fatal':
+            storeActions.setAppStatus({
+              state: 'error',
+              message: payload.message
+            });
+            break;
 
-        default:
-          console.warn(`[WorkerManager] Received unknown message type: ${type}`);
+          case 'enrichment/complete':
+            console.log('[WorkerManager] Phase B complete. Triggering Phase C (extendGraph).');
+            this.extendGraph();
+            break;
+
+          case 'warning/nonCritical':
+            console.warn('[Worker] Non-critical warning:', payload.message);
+            break;
+
+          default:
+            console.warn(`[WorkerManager] Received unknown message type: ${type}`);
+        }
       }
+    }
+
+    // After adding new messages (potentially a large batch), schedule an update.
+    if (this.messageQueue.length > 0) {
+      this.scheduleUpdate();
     }
   }
 

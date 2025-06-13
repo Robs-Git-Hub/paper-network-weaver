@@ -10,6 +10,76 @@ import { getState, resetState, setMasterPaperUid, setStubCreationThreshold, setS
 import { normalizeOpenAlexId } from '../../services/openAlex-util';
 import type { WorkerMessage } from './types';
 
+// --- BATCHING LOGIC START ---
+
+// A queue to hold messages before sending them in a batch.
+let messageQueue: WorkerMessage[] = [];
+let batchIntervalId: ReturnType<typeof setInterval> | null = null;
+
+// These message types are safe to batch. Others (like status updates) should be sent immediately.
+const BATCHABLE_TYPES = [
+  'graph/reset',
+  'graph/addPaper',
+  'graph/addAuthor',
+  'graph/addInstitution',
+  'graph/addAuthorship',
+  'graph/addRelationship',
+  'graph/setExternalId',
+  'papers/updateOne',
+  'graph/addNodes',
+  'graph/applyAuthorMerge',
+];
+
+/**
+ * Sends the current message queue to the main thread and clears it.
+ */
+function flushQueue() {
+  if (messageQueue.length > 0) {
+    // DIAGNOSTIC: Log the batch being sent from the worker.
+    console.log(`[Worker] Flushing message queue with ${messageQueue.length} items.`);
+    self.postMessage(messageQueue);
+    messageQueue = [];
+  }
+}
+
+/**
+ * A replacement for the original postMessage utility.
+ * It pushes batchable messages to a queue and sends non-batchable messages immediately.
+ * @param type The message type.
+ * @param payload The message payload.
+ */
+function postMessageWithBatching(type: string, payload: any) {
+  if (BATCHABLE_TYPES.includes(type)) {
+    messageQueue.push({ type, payload });
+  } else {
+    // Send important, non-batchable messages immediately.
+    self.postMessage({ type, payload });
+  }
+}
+
+/**
+ * Starts the batching interval.
+ */
+function startBatching() {
+  if (batchIntervalId === null) {
+    batchIntervalId = setInterval(flushQueue, 250); // Flush every 250ms
+  }
+}
+
+/**
+ * Stops the batching interval and performs a final flush to send any remaining messages.
+ */
+function stopBatching() {
+  if (batchIntervalId !== null) {
+    clearInterval(batchIntervalId);
+    batchIntervalId = null;
+  }
+  flushQueue(); // Final flush
+}
+
+// --- BATCHING LOGIC END ---
+
+
 export function setupWorkerMessageHandler() {
   self.addEventListener('message', (event: MessageEvent<WorkerMessage>) => {
     const { type, payload } = event.data;
@@ -17,11 +87,12 @@ export function setupWorkerMessageHandler() {
     switch (type) {
       case 'graph/processMasterPaper':
         (async () => {
+          // The new utils object uses our batching postMessage function.
+          const utils = { postMessage: postMessageWithBatching };
           try {
             console.log("--- [Worker] Received 'graph/processMasterPaper'. Starting Phase A. ---");
             resetState();
-            
-            const utils = getUtilityFunctions();
+            startBatching();
             
             // --- STREAMING CHANGE: Tell the main thread to reset its state ---
             utils.postMessage('graph/reset', {});
@@ -45,7 +116,7 @@ export function setupWorkerMessageHandler() {
               initialState.authors, 
               initialState.institutions, 
               initialState.authorships,
-              utils // Pass utils down to enable streaming
+              utils // Pass utils with batching down to enable streaming
             );
             setMasterPaperUid(masterUid);
             console.log('[Worker] Phase A, Step 1: Master Paper processed.');
@@ -58,8 +129,6 @@ export function setupWorkerMessageHandler() {
             
             console.log('--- [Worker] Phase A Complete. All initial data has been streamed. ---');
             
-            // --- STREAMING CHANGE: THE LARGE, BLOCKING `graph/setState` MESSAGE HAS BEEN REMOVED ---
-            
             console.log('--- [Worker] Starting Phase B: Background Enrichment. ---');
             utils.postMessage('app_status/update', { state: 'enriching', message: null });
             
@@ -71,10 +140,12 @@ export function setupWorkerMessageHandler() {
 
           } catch (error) {
             console.error('[Worker] A fatal error occurred during graph build:', error);
-            const utils = getUtilityFunctions();
             utils.postMessage('error/fatal', { 
               message: `Worker error: ${error instanceof Error ? error.message : 'Unknown error'}` 
             });
+          } finally {
+            // Ensure all messages are sent and the interval is cleaned up.
+            stopBatching();
           }
         })();
         break;
@@ -83,7 +154,9 @@ export function setupWorkerMessageHandler() {
         console.log('--- [Worker] Received "graph/extend". Starting Phase C. ---');
         
         (async () => {
+          const utils = { postMessage: postMessageWithBatching };
           try {
+            startBatching();
             if (payload) {
               console.log('[Worker] Synchronizing and translating state from main thread.');
               const currentState = getState();
@@ -101,8 +174,6 @@ export function setupWorkerMessageHandler() {
 
               setState(translatedState);
             }
-
-            const utils = getUtilityFunctions();
             
             utils.postMessage('app_status/update', { state: 'extending', message: 'Extending network...' });
             
@@ -113,10 +184,12 @@ export function setupWorkerMessageHandler() {
             utils.postMessage('app_status/update', { state: 'active', message: null });
           } catch (error) {
             console.error('[Worker] Error during graph extension:', error);
-            const utils = getUtilityFunctions();
             utils.postMessage('error/fatal', { 
               message: `Extension error: ${error instanceof Error ? error.message : 'Unknown error'}` 
             });
+          } finally {
+            // Ensure all messages are sent and the interval is cleaned up.
+            stopBatching();
           }
         })();
         break;
