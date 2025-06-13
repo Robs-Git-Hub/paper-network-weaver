@@ -7,7 +7,8 @@ interface WorkerMessage {
 }
 
 // We'll process messages in chunks to keep the main thread responsive.
-const BATCH_CHUNK_SIZE = 250; 
+// This value is tuned to be small enough to avoid blocking the render thread.
+const BATCH_CHUNK_SIZE = 50; 
 
 class WorkerManager {
   private worker: Worker | null = null;
