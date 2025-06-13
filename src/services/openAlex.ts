@@ -5,7 +5,9 @@ import { fetchWithRetry } from '../utils/api-helpers';
 import { normalizeOpenAlexId } from './openAlex-util';
 import type { OpenAlexPaper, OpenAlexSearchResponse } from '../workers/graph-core/types';
 
-const OPENALEX_API_BATCH_SIZE = 50;
+// --- NEW: Calculated and rounded-down optimal batch sizes for safety ---
+const OPENALEX_ID_BATCH_SIZE = 150;
+const DOI_BATCH_SIZE = 70;
 
 function chunkArray<T>(array: T[], chunkSize: number): T[][] {
   const chunks: T[][] = [];
@@ -78,18 +80,21 @@ export class OpenAlexService {
     return { results: allResults, meta: { count: allResults.length, db_response_time_ms: 0, page: 1, per_page: allResults.length } };
   }
 
+  // --- MODIFIED: Sequential fetching with optimal batch size ---
   async fetchCitationsForMultiplePapers(workIds: string[]): Promise<OpenAlexSearchResponse> {
     const normalizedIds = workIds.map(normalizeOpenAlexId);
     if (normalizedIds.length === 0) return { results: [], meta: { count: 0, db_response_time_ms: 0, page: 1, per_page: 0 } };
     
-    const idChunks = chunkArray(normalizedIds, OPENALEX_API_BATCH_SIZE);
-    const promises = idChunks.map(chunk => {
+    const idChunks = chunkArray(normalizedIds, OPENALEX_ID_BATCH_SIZE);
+    const allResults: OpenAlexPaper[] = [];
+
+    for (const chunk of idChunks) {
       const filter = `cites:${chunk.join('|')}`;
       const initialUrl = this.buildOpenAlexUrl(filter, 'FULL_INGESTION', 200);
-      return this.fetchAllPages(initialUrl);
-    });
-    const resultsFromAllChunks = await Promise.all(promises);
-    const allResults = resultsFromAllChunks.flat();
+      const chunkResults = await this.fetchAllPages(initialUrl);
+      allResults.push(...chunkResults);
+    }
+    
     return { results: allResults, meta: { count: allResults.length, db_response_time_ms: 0, page: 1, per_page: allResults.length } };
   }
 
@@ -103,45 +108,45 @@ export class OpenAlexService {
     return response.json();
   }
 
-  // --- NEW DEDICATED FUNCTION FOR DOIs ---
+  // --- MODIFIED: Sequential fetching with optimal DOI batch size ---
   async fetchMultiplePapersByDoi(dois: string[], fieldSetName: keyof typeof OPENALEX_FIELD_SETS): Promise<OpenAlexSearchResponse> {
     if (dois.length === 0) return { results: [], meta: { count: 0, db_response_time_ms: 0, page: 1, per_page: 0 } };
 
-    const idChunks = chunkArray(dois, OPENALEX_API_BATCH_SIZE);
-    const promises = idChunks.map(chunk => {
+    const idChunks = chunkArray(dois, DOI_BATCH_SIZE);
+    const allResults: OpenAlexPaper[] = [];
+
+    for (const chunk of idChunks) {
       const filter = `doi:${chunk.join('|')}`;
       const url = this.buildOpenAlexUrl(filter, fieldSetName);
-      // This call does NOT need pagination, so we call fetchWithRetry directly.
-      return fetchWithRetry(url);
-    });
+      const response = await fetchWithRetry(url);
 
-    const responses = await Promise.all(promises);
-    const allResults: OpenAlexPaper[] = [];
-    for (const response of responses) {
       if (response.ok) {
-        const data: OpenAlexSearchResponse = await response.json();
+        const data: OpenAlexResponse = await response.json();
         if (data.results) allResults.push(...data.results);
       } else {
         console.error(`OpenAlex batch DOI fetch chunk error: ${response.status} ${response.statusText}`);
-        // Throw an error to be caught by the calling function's try/catch
         throw new Error(`Fatal API Error: Status ${response.status}`);
       }
     }
+    
     return { results: allResults, meta: { count: allResults.length, db_response_time_ms: 0, page: 1, per_page: allResults.length } };
   }
 
+  // --- MODIFIED: Sequential fetching with optimal batch size ---
   async fetchMultiplePapers(workIds: string[], fieldSetName: keyof typeof OPENALEX_FIELD_SETS = 'FULL_INGESTION'): Promise<OpenAlexSearchResponse> {
     const normalizedIds = workIds.map(normalizeOpenAlexId);
     if (normalizedIds.length === 0) return { results: [], meta: { count: 0, db_response_time_ms: 0, page: 1, per_page: 0 } };
 
-    const idChunks = chunkArray(normalizedIds, OPENALEX_API_BATCH_SIZE);
-    const promises = idChunks.map(chunk => {
+    const idChunks = chunkArray(normalizedIds, OPENALEX_ID_BATCH_SIZE);
+    const allResults: OpenAlexPaper[] = [];
+
+    for (const chunk of idChunks) {
       const filter = `openalex:${chunk.join('|')}`;
       const initialUrl = this.buildOpenAlexUrl(filter, fieldSetName, 200);
-      return this.fetchAllPages(initialUrl);
-    });
-    const resultsFromAllChunks = await Promise.all(promises);
-    const allResults = resultsFromAllChunks.flat();
+      const chunkResults = await this.fetchAllPages(initialUrl);
+      allResults.push(...chunkResults);
+    }
+
     return { results: allResults, meta: { count: allResults.length, db_response_time_ms: 0, page: 1, per_page: allResults.length } };
   }
 }
