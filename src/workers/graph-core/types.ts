@@ -45,11 +45,12 @@ export interface Authorship {
   institution_uids: string[];
 }
 
+// --- MODIFIED: Removed 'similar' type for consistency ---
 export interface PaperRelationship {
   source_short_uid: string;
   target_short_uid: string;
-  relationship_type: 'cites' | 'similar';
-  tag?: '1st_degree' | '2nd_degree' | 'referenced_by_1st_degree' | 'similar';
+  relationship_type: 'cites';
+  tag?: '1st_degree' | '2nd_degree' | 'referenced_by_1st_degree';
 }
 
 // Worker message types
@@ -104,6 +105,7 @@ export interface OpenAlexPaper {
   related_works?: string[];
 }
 
+// --- MODIFIED: Added optional 'next_cursor' property ---
 export interface OpenAlexSearchResponse {
   results: OpenAlexPaper[];
   meta: {
@@ -111,6 +113,7 @@ export interface OpenAlexSearchResponse {
     db_response_time_ms: number;
     page: number;
     per_page: number;
+    next_cursor?: string | null;
   };
 }
 

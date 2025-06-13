@@ -54,7 +54,7 @@ export class OpenAlexService {
         allResults.push(...data.results);
       }
       pagesFetched++;
-      nextCursor = data.meta.next_cursor;
+      nextCursor = data.meta.next_cursor ?? null;
     }
 
     if (nextCursor) {
@@ -121,7 +121,8 @@ export class OpenAlexService {
       const response = await fetchWithRetry(url);
 
       if (response.ok) {
-        const data: OpenAlexResponse = await response.json();
+        // --- FIXED: Corrected typo from OpenAlexResponse to OpenAlexSearchResponse ---
+        const data: OpenAlexSearchResponse = await response.json();
         if (data.results) allResults.push(...data.results);
       } else {
         console.error(`OpenAlex batch DOI fetch chunk error: ${response.status} ${response.statusText}`);
