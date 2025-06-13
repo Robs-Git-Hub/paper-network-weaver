@@ -10,6 +10,11 @@ class WorkerManager {
   private worker: Worker | null = null;
   private store = useKnowledgeGraphStore;
 
+  // --- START: BATCHING MECHANISM ---
+  private messageQueue: WorkerMessage[] = [];
+  private isUpdateScheduled = false;
+  // --- END: BATCHING MECHANISM ---
+
   initialize() {
     if (this.worker) {
       this.worker.terminate();
@@ -24,79 +29,95 @@ class WorkerManager {
     this.worker.addEventListener('error', this.handleWorkerError.bind(this));
   }
 
+  private processQueue() {
+    if (this.messageQueue.length === 0) {
+      this.isUpdateScheduled = false;
+      return;
+    }
+
+    const batch = this.messageQueue.slice(); // Create a copy of the queue for processing
+    this.messageQueue = []; // Clear the main queue immediately for incoming messages
+
+    // --- VERIFICATION STEP ---
+    // Instead of calling the store, we will log the batch to verify our mechanism.
+    // In the final implementation, this is where we'll call the store's batch update action.
+    console.log(
+      `%c[WorkerManager] VERIFICATION: Processing batch of ${batch.length} messages.`,
+      'color: #4CAF50; font-weight: bold;'
+    );
+    // --- END VERIFICATION STEP ---
+
+    this.isUpdateScheduled = false;
+
+    // If more messages arrived while processing, schedule another update.
+    if (this.messageQueue.length > 0) {
+      this.scheduleUpdate();
+    }
+  }
+
+  private scheduleUpdate() {
+    if (!this.isUpdateScheduled) {
+      this.isUpdateScheduled = true;
+      requestAnimationFrame(this.processQueue.bind(this));
+    }
+  }
+
   private handleWorkerMessage(event: MessageEvent<WorkerMessage>) {
-    const { type, payload } = event.data;
-    // This log is helpful for debugging the stream of messages from the worker.
+    const message = event.data;
+    const { type, payload } = message;
+    
+    // This log remains helpful to see the raw firehose of messages.
     console.log('[WorkerManager] Received message:', type, payload);
 
-    const storeActions = this.store.getState();
+    // We only batch the high-frequency data messages. Control messages are processed immediately.
+    const BATCHABLE_TYPES = [
+      'graph/reset',
+      'graph/addPaper',
+      'graph/addAuthor',
+      'graph/addInstitution',
+      'graph/addAuthorship',
+      'graph/addRelationship',
+      'graph/setExternalId',
+      'papers/updateOne',
+      'graph/addNodes',
+      'graph/applyAuthorMerge',
+    ];
 
-    switch (type) {
-      // --- START: NEW STREAMING HANDLERS ---
-      case 'graph/reset':
-        storeActions.resetGraph();
-        break;
-      case 'graph/addPaper':
-        storeActions.addPaper(payload.paper);
-        break;
-      case 'graph/addAuthor':
-        storeActions.addAuthor(payload.author);
-        break;
-      case 'graph/addInstitution':
-        storeActions.addInstitution(payload.institution);
-        break;
-      case 'graph/addAuthorship':
-        storeActions.addAuthorship(payload.authorship);
-        break;
-      case 'graph/addRelationship':
-        storeActions.addRelationship(payload.relationship);
-        break;
-      case 'graph/setExternalId':
-        storeActions.setExternalId(payload.key, payload.uid);
-        break;
-      // --- END: NEW STREAMING HANDLERS ---
+    if (BATCHABLE_TYPES.includes(type)) {
+      this.messageQueue.push(message);
+      this.scheduleUpdate();
+    } else {
+      // --- Process non-batchable, low-frequency messages immediately ---
+      const storeActions = this.store.getState();
+      switch (type) {
+        case 'progress/update':
+          storeActions.setAppStatus({ message: payload.message });
+          break;
 
-      case 'progress/update':
-        storeActions.setAppStatus({ message: payload.message });
-        break;
+        case 'app_status/update':
+          storeActions.setAppStatus({ state: payload.state, message: payload.message });
+          break;
+        
+        case 'error/fatal':
+          storeActions.setAppStatus({
+            state: 'error',
+            message: payload.message
+          });
+          break;
 
-      case 'app_status/update':
-        storeActions.setAppStatus({ state: payload.state, message: payload.message });
-        break;
-      
-      // `graph/setState` is now removed, as it's been replaced by the streaming handlers.
+        case 'enrichment/complete':
+          // When Phase B is confirmed complete, we trigger Phase C.
+          console.log('[WorkerManager] Phase B complete. Triggering Phase C (extendGraph).');
+          this.extendGraph();
+          break;
 
-      case 'papers/updateOne':
-        storeActions.updatePaper(payload.id, payload.changes);
-        break;
+        case 'warning/nonCritical':
+          console.warn('[Worker] Non-critical warning:', payload.message);
+          break;
 
-      case 'graph/addNodes': // Primarily used by the 'extend' phase
-        storeActions.addNodes(payload.data);
-        break;
-
-      case 'graph/applyAuthorMerge':
-        storeActions.applyAuthorMerge(payload.updates, payload.deletions);
-        break;
-
-      case 'error/fatal':
-        storeActions.setAppStatus({
-          state: 'error',
-          message: payload.message
-        });
-        break;
-
-      case 'enrichment/complete':
-        // When Phase B is confirmed complete, we trigger Phase C.
-        console.log('[WorkerManager] Phase B complete. Triggering Phase C (extendGraph).');
-        this.extendGraph();
-        break;
-
-      case 'warning/nonCritical':
-        console.warn('[Worker] Non-critical warning:', payload.message);
-        break;
-
-      default:
-        console.warn(`[WorkerManager] Received unknown message type: ${type}`);
+        default:
+          console.warn(`[WorkerManager] Received unknown message type: ${type}`);
+      }
     }
   }
 
