@@ -35,17 +35,13 @@ class WorkerManager {
       return;
     }
 
-    const batch = this.messageQueue.slice(); // Create a copy of the queue for processing
-    this.messageQueue = []; // Clear the main queue immediately for incoming messages
+    const batch = this.messageQueue.slice(); // Create a copy for processing
+    this.messageQueue = []; // Clear the queue for new messages
 
-    // --- VERIFICATION STEP ---
-    // Instead of calling the store, we will log the batch to verify our mechanism.
-    // In the final implementation, this is where we'll call the store's batch update action.
-    console.log(
-      `%c[WorkerManager] VERIFICATION: Processing batch of ${batch.length} messages.`,
-      'color: #4CAF50; font-weight: bold;'
-    );
-    // --- END VERIFICATION STEP ---
+    // --- FINAL IMPLEMENTATION ---
+    // Call the single batch update action in the store.
+    this.store.getState().applyMessageBatch(batch);
+    // --- END FINAL IMPLEMENTATION ---
 
     this.isUpdateScheduled = false;
 
@@ -66,8 +62,8 @@ class WorkerManager {
     const message = event.data;
     const { type, payload } = message;
     
-    // This log remains helpful to see the raw firehose of messages.
-    console.log('[WorkerManager] Received message:', type, payload);
+    // We can keep this log for now; it's useful for debugging the raw stream.
+    // console.log('[WorkerManager] Received message:', type, payload);
 
     // We only batch the high-frequency data messages. Control messages are processed immediately.
     const BATCHABLE_TYPES = [

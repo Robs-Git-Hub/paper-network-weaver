@@ -61,6 +61,12 @@ export interface AppStatus {
   message: string | null;
 }
 
+// Used for batch processing messages from the worker
+interface WorkerMessage {
+  type: string;
+  payload: any;
+}
+
 interface KnowledgeGraphStore {
   // === ENTITY SLICES ===
   papers: Record<string, Paper>;
@@ -103,6 +109,10 @@ interface KnowledgeGraphStore {
   }, deletions: {
     authors: string[];
   }) => void;
+
+  // --- START: NEW BATCH UPDATE ACTION ---
+  applyMessageBatch: (batch: WorkerMessage[]) => void;
+  // --- END: NEW BATCH UPDATE ACTION ---
 }
 
 export const useKnowledgeGraphStore = create<KnowledgeGraphStore>((set, get) => ({
@@ -212,5 +222,88 @@ export const useKnowledgeGraphStore = create<KnowledgeGraphStore>((set, get) => 
       authors: newAuthors,
       authorships: newAuthorships
     };
-  })
+  }),
+  
+  // --- START: NEW BATCH UPDATE ACTION IMPLEMENTATION ---
+  applyMessageBatch: (batch) => set((state) => {
+    // Create mutable drafts of the state slices we will be updating.
+    // This is more performant than spreading the state for every single message in the batch.
+    const nextState = {
+      papers: { ...state.papers },
+      authors: { ...state.authors },
+      institutions: { ...state.institutions },
+      authorships: { ...state.authorships },
+      paper_relationships: [...state.paper_relationships],
+      external_id_index: { ...state.external_id_index },
+    };
+
+    // Process each message in the batch and apply it to our draft state.
+    for (const message of batch) {
+      const { type, payload } = message;
+
+      switch (type) {
+        case 'graph/reset':
+          nextState.papers = {};
+          nextState.authors = {};
+          nextState.institutions = {};
+          nextState.authorships = {};
+          nextState.paper_relationships = [];
+          nextState.external_id_index = {};
+          break;
+        case 'graph/addPaper':
+          nextState.papers[payload.paper.short_uid] = payload.paper;
+          break;
+        case 'graph/addAuthor':
+          nextState.authors[payload.author.short_uid] = payload.author;
+          break;
+        case 'graph/addInstitution':
+          nextState.institutions[payload.institution.short_uid] = payload.institution;
+          break;
+        case 'graph/addAuthorship':
+          const key = `${payload.authorship.paper_short_uid}_${payload.authorship.author_short_uid}`;
+          nextState.authorships[key] = payload.authorship;
+          break;
+        case 'graph/addRelationship':
+          nextState.paper_relationships.push(payload.relationship);
+          break;
+        case 'graph/setExternalId':
+          nextState.external_id_index[payload.key] = payload.uid;
+          break;
+        case 'papers/updateOne':
+          if (nextState.papers[payload.id]) {
+            nextState.papers[payload.id] = { ...nextState.papers[payload.id], ...payload.changes };
+          }
+          break;
+        case 'graph/addNodes':
+          Object.assign(nextState.papers, payload.data.papers || {});
+          Object.assign(nextState.authors, payload.data.authors || {});
+          Object.assign(nextState.institutions, payload.data.institutions || {});
+          Object.assign(nextState.authorships, payload.data.authorships || {});
+          nextState.paper_relationships.push(...(payload.data.paper_relationships || []));
+          break;
+        case 'graph/applyAuthorMerge':
+          // This logic is complex, so we'll reuse the existing applyAuthorMerge logic,
+          // but apply it to our draft state `nextState` instead of the original state.
+          const { updates, deletions } = payload;
+          updates.authors.forEach(({ id, changes }: { id: string, changes: Partial<Author> }) => {
+            if (nextState.authors[id]) {
+              nextState.authors[id] = { ...nextState.authors[id], ...changes };
+            }
+          });
+          updates.authorships.forEach(({ id, changes }: { id: string, changes: Partial<Authorship> }) => {
+            if (nextState.authorships[id]) {
+              nextState.authorships[id] = { ...nextState.authorships[id], ...changes };
+            }
+          });
+          deletions.authors.forEach((id: string) => {
+            delete nextState.authors[id];
+          });
+          break;
+      }
+    }
+
+    // Return the final, updated state. Zustand will handle the single re-render.
+    return nextState;
+  }),
+  // --- END: NEW BATCH UPDATE ACTION IMPLEMENTATION ---
 }));
