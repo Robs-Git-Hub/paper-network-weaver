@@ -6,7 +6,8 @@ interface WorkerMessage {
   payload: any;
 }
 
-const BATCH_CHUNK_SIZE = 250; // Process 250 messages at a time
+// We'll process messages in chunks to keep the main thread responsive.
+const BATCH_CHUNK_SIZE = 250; 
 
 class WorkerManager {
   private worker: Worker | null = null;
@@ -29,36 +30,28 @@ class WorkerManager {
     this.worker.addEventListener('error', this.handleWorkerError.bind(this));
   }
 
-  // The processQueue function is now a chunk processor.
+  // This function processes the queue in small, manageable chunks.
   private processQueue() {
-    // If the queue is empty, we're done.
+    // Correctly reset the scheduling flag at the beginning of the processing cycle.
+    this.isUpdateScheduled = false;
+
     if (this.messageQueue.length === 0) {
-      this.isUpdateScheduled = false;
       return;
     }
 
     // Take a small chunk from the front of the queue.
     const chunk = this.messageQueue.splice(0, BATCH_CHUNK_SIZE);
 
-    // --- VERIFICATION STEP ---
-    // Log the chunk we are about to process, and how many items are left.
-    console.log(
-      `%c[WorkerManager] VERIFICATION: Processing chunk of ${chunk.length}. Queue length: ${this.messageQueue.length}`,
-      'color: #FFA500; font-weight: bold;'
-    );
-    // In the final implementation, we will call the store here:
-    // this.store.getState().applyMessageBatch(chunk);
-    // --- END VERIFICATION STEP ---
+    // Process the chunk by sending it to the store.
+    this.store.getState().applyMessageBatch(chunk);
 
-    // If there are more items in the queue, schedule the next chunk.
+    // If there are still more items left in the queue, schedule the next chunk processing.
     if (this.messageQueue.length > 0) {
       this.scheduleUpdate();
-    } else {
-      this.isUpdateScheduled = false;
     }
   }
 
-  // This function just kicks off the queue processing loop.
+  // This function ensures we only schedule one processing loop at a time.
   private scheduleUpdate() {
     if (!this.isUpdateScheduled) {
       this.isUpdateScheduled = true;
@@ -69,11 +62,7 @@ class WorkerManager {
   private handleWorkerMessage(event: MessageEvent<WorkerMessage>) {
     const message = event.data;
     const { type, payload } = message;
-    
-    // We can keep this log for now; it's useful for debugging the raw stream.
-    // console.log('[WorkerManager] Received message:', type, payload);
 
-    // We only batch the high-frequency data messages. Control messages are processed immediately.
     const BATCHABLE_TYPES = [
       'graph/reset',
       'graph/addPaper',
@@ -89,9 +78,9 @@ class WorkerManager {
 
     if (BATCHABLE_TYPES.includes(type)) {
       this.messageQueue.push(message);
-      this.scheduleUpdate(); // This will kick off the chunking process if it's not already running.
+      this.scheduleUpdate();
     } else {
-      // --- Process non-batchable, low-frequency messages immediately ---
+      // Process non-batchable, low-frequency messages immediately.
       const storeActions = this.store.getState();
       switch (type) {
         case 'progress/update':
@@ -110,7 +99,6 @@ class WorkerManager {
           break;
 
         case 'enrichment/complete':
-          // When Phase B is confirmed complete, we trigger Phase C.
           console.log('[WorkerManager] Phase B complete. Triggering Phase C (extendGraph).');
           this.extendGraph();
           break;
