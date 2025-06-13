@@ -6,14 +6,14 @@ interface WorkerMessage {
   payload: any;
 }
 
+const BATCH_CHUNK_SIZE = 250; // Process 250 messages at a time
+
 class WorkerManager {
   private worker: Worker | null = null;
   private store = useKnowledgeGraphStore;
-
-  // --- START: BATCHING MECHANISM ---
+  
   private messageQueue: WorkerMessage[] = [];
   private isUpdateScheduled = false;
-  // --- END: BATCHING MECHANISM ---
 
   initialize() {
     if (this.worker) {
@@ -29,28 +29,36 @@ class WorkerManager {
     this.worker.addEventListener('error', this.handleWorkerError.bind(this));
   }
 
+  // The processQueue function is now a chunk processor.
   private processQueue() {
+    // If the queue is empty, we're done.
     if (this.messageQueue.length === 0) {
       this.isUpdateScheduled = false;
       return;
     }
 
-    const batch = this.messageQueue.slice(); // Create a copy for processing
-    this.messageQueue = []; // Clear the queue for new messages
+    // Take a small chunk from the front of the queue.
+    const chunk = this.messageQueue.splice(0, BATCH_CHUNK_SIZE);
 
-    // --- FINAL IMPLEMENTATION ---
-    // Call the single batch update action in the store.
-    this.store.getState().applyMessageBatch(batch);
-    // --- END FINAL IMPLEMENTATION ---
+    // --- VERIFICATION STEP ---
+    // Log the chunk we are about to process, and how many items are left.
+    console.log(
+      `%c[WorkerManager] VERIFICATION: Processing chunk of ${chunk.length}. Queue length: ${this.messageQueue.length}`,
+      'color: #FFA500; font-weight: bold;'
+    );
+    // In the final implementation, we will call the store here:
+    // this.store.getState().applyMessageBatch(chunk);
+    // --- END VERIFICATION STEP ---
 
-    this.isUpdateScheduled = false;
-
-    // If more messages arrived while processing, schedule another update.
+    // If there are more items in the queue, schedule the next chunk.
     if (this.messageQueue.length > 0) {
       this.scheduleUpdate();
+    } else {
+      this.isUpdateScheduled = false;
     }
   }
 
+  // This function just kicks off the queue processing loop.
   private scheduleUpdate() {
     if (!this.isUpdateScheduled) {
       this.isUpdateScheduled = true;
@@ -81,7 +89,7 @@ class WorkerManager {
 
     if (BATCHABLE_TYPES.includes(type)) {
       this.messageQueue.push(message);
-      this.scheduleUpdate();
+      this.scheduleUpdate(); // This will kick off the chunking process if it's not already running.
     } else {
       // --- Process non-batchable, low-frequency messages immediately ---
       const storeActions = this.store.getState();
@@ -132,6 +140,10 @@ class WorkerManager {
           throw new Error('Worker initialization failed');
       }
     }
+
+    // Reset the queue for a new analysis
+    this.messageQueue = [];
+    this.isUpdateScheduled = false;
 
     this.worker.postMessage({
       type: 'graph/processMasterPaper',
