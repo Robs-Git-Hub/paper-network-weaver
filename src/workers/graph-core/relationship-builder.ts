@@ -19,7 +19,6 @@ export async function fetchFirstDegreeCitations(
   const data = await openAlexService.fetchCitations(masterPaperOpenAlexId);
   
   const referencedBy1stDegreeFreq: Record<string, number> = {};
-  const relatedWorksFreq: Record<string, number> = {};
   
   for (const paperData of data.results) {
     const state = getGraphState();
@@ -30,7 +29,6 @@ export async function fetchFirstDegreeCitations(
     
     if (state.papers[paperUid] && !state.papers[paperUid].relationship_tags.includes('1st_degree')) {
       state.papers[paperUid].relationship_tags.push('1st_degree');
-      // --- BUG FIX: Send an update with the new tags ---
       utils.postMessage('papers/updateOne', {
         id: paperUid,
         changes: { relationship_tags: [...state.papers[paperUid].relationship_tags] }
@@ -49,33 +47,23 @@ export async function fetchFirstDegreeCitations(
       const cleanId = normalizeOpenAlexId(refWorkUrl);
       if (cleanId) referencedBy1stDegreeFreq[cleanId] = (referencedBy1stDegreeFreq[cleanId] || 0) + 1;
     });
-    
-    (paperData.related_works || []).forEach(relWorkUrl => {
-      const cleanId = normalizeOpenAlexId(relWorkUrl);
-      if (cleanId) relatedWorksFreq[cleanId] = (relatedWorksFreq[cleanId] || 0) + 1;
-    });
   }
   
   const referencedBy1stDegreeIds = Object.keys(referencedBy1stDegreeFreq).filter(id => referencedBy1stDegreeFreq[id] >= getGraphState().stubCreationThreshold);
-  const frequentRelated = Object.keys(relatedWorksFreq).filter(id => relatedWorksFreq[id] >= getGraphState().stubCreationThreshold);
   
   if (referencedBy1stDegreeIds.length > 0) {
     await createStubsFromOpenAlexIds(referencedBy1stDegreeIds, 'cites', getGraphState, utils, 'referenced_by_1st_degree');
   }
   
-  if (frequentRelated.length > 0) {
-    await createStubsFromOpenAlexIds(frequentRelated, 'similar', getGraphState, utils, 'similar');
-  }
-  
-  console.log(`[Worker] Phase A, Step 2: Processed ${data.results.length} citations, found ${referencedBy1stDegreeIds.length} referenced_by_1st_degree stubs and ${frequentRelated.length} frequent similar stubs.`);
+  console.log(`[Worker] Phase A, Step 2: Processed ${data.results.length} citations, found ${referencedBy1stDegreeIds.length} referenced_by_1st_degree stubs.`);
 }
 
 export async function createStubsFromOpenAlexIds(
   openAlexIds: string[], 
-  relationshipType: 'cites' | 'similar', 
+  relationshipType: 'cites', 
   getGraphState: () => GraphState,
   utils: UtilityFunctions,
-  tag?: '1st_degree' | '2nd_degree' | 'referenced_by_1st_degree' | 'similar'
+  tag?: '1st_degree' | '2nd_degree' | 'referenced_by_1st_degree'
 ) {
   if (openAlexIds.length === 0) return;
   
@@ -90,7 +78,6 @@ export async function createStubsFromOpenAlexIds(
     
     if (tag && state.papers[stubUid] && !state.papers[stubUid].relationship_tags.includes(tag)) {
       state.papers[stubUid].relationship_tags.push(tag);
-      // --- BUG FIX: Send an update with the new tags ---
       utils.postMessage('papers/updateOne', {
         id: stubUid,
         changes: { relationship_tags: [...state.papers[stubUid].relationship_tags] }
@@ -163,7 +150,6 @@ export async function fetchSecondDegreeCitations(
       
       if (currentState.papers[paperUid] && !currentState.papers[paperUid].relationship_tags.includes('2nd_degree')) {
         currentState.papers[paperUid].relationship_tags.push('2nd_degree');
-        // --- BUG FIX: Send an update with the new tags ---
         utils.postMessage('papers/updateOne', {
           id: paperUid,
           changes: { relationship_tags: [...currentState.papers[paperUid].relationship_tags] }
