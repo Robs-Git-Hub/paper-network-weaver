@@ -26,10 +26,13 @@ const OPENALEX_FIELD_SETS = {
 
 export class OpenAlexService {
   private readonly baseUrl = 'https://api.openalex.org';
+  // --- ADDED: Email for OpenAlex polite pool access to prevent 403 errors. ---
+  private readonly politeMailto = 'contact@acesite.net';
 
   private buildOpenAlexUrl(filter: string, fieldSetName: keyof typeof OPENALEX_FIELD_SETS, perPage: number | null = null): string {
     const fields = OPENALEX_FIELD_SETS[fieldSetName].join(',');
-    let url = `${this.baseUrl}/works?filter=${filter}&select=${fields}`;
+    // --- MODIFIED: Add mailto parameter for polite pool access. ---
+    let url = `${this.baseUrl}/works?mailto=${this.politeMailto}&filter=${filter}&select=${fields}`;
     if (perPage) {
       url += `&per_page=${perPage}`;
     }
@@ -101,7 +104,8 @@ export class OpenAlexService {
   async fetchPaperDetails(openAlexId: string): Promise<OpenAlexPaper | null> {
     const workId = normalizeOpenAlexId(openAlexId);
     const fields = OPENALEX_FIELD_SETS['FULL_INGESTION'].join(',');
-    const url = `${this.baseUrl}/works/${workId}?select=${fields}`;
+    // --- MODIFIED: Add mailto parameter for polite pool access. ---
+    const url = `${this.baseUrl}/works/${workId}?mailto=${this.politeMailto}&select=${fields}`;
     const response = await fetchWithRetry(url);
     if (response.status === 404) return null;
     if (!response.ok) throw new Error(`OpenAlex paper details API error: ${response.status}`);
