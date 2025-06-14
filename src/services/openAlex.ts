@@ -6,7 +6,7 @@ import { normalizeOpenAlexId } from './openAlex-util';
 import type { OpenAlexPaper, OpenAlexSearchResponse } from '../workers/graph-core/types';
 
 // --- NEW: Calculated and rounded-down optimal batch sizes for safety ---
-const OPENALEX_ID_BATCH_SIZE = 150;
+const OPENALEX_ID_BATCH_SIZE = 100;
 const DOI_BATCH_SIZE = 70;
 
 function chunkArray<T>(array: T[], chunkSize: number): T[][] {
