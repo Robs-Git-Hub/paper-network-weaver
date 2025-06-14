@@ -6,7 +6,7 @@ import { normalizeOpenAlexId } from './openAlex-util';
 import type { OpenAlexPaper, OpenAlexSearchResponse } from '../workers/graph-core/types';
 
 // --- NEW: Calculated and rounded-down optimal batch sizes for safety ---
-const OPENALEX_ID_BATCH_SIZE = 125;
+const OPENALEX_ID_BATCH_SIZE = 100;
 const DOI_BATCH_SIZE = 70;
 
 function chunkArray<T>(array: T[], chunkSize: number): T[][] {
@@ -27,7 +27,7 @@ const OPENALEX_FIELD_SETS = {
 export class OpenAlexService {
   private readonly baseUrl = 'https://api.openalex.org';
   // --- ADDED: Email for OpenAlex polite pool access to prevent 403 errors. ---
-  private readonly politeMailto = 'hello@lovable.dev';
+  private readonly politeMailto = 'contact@acesite.net';
 
   private buildOpenAlexUrl(filter: string, fieldSetName: keyof typeof OPENALEX_FIELD_SETS, perPage: number | null = null): string {
     const fields = OPENALEX_FIELD_SETS[fieldSetName].join(',');
