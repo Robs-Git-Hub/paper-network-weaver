@@ -9,7 +9,8 @@ export const RELATIONSHIP_FILTERS = [
 ];
 
 export const useRelationshipFilters = (papers: Paper[]) => {
-  const [activeFilters, setActiveFilters] = useState<string[]>(['1st_degree', '2nd_degree', 'referenced_by_1st_degree']);
+  // This is the only line we are changing.
+  const [activeFilters, setActiveFilters] = useState<string[]>(['1st_degree']);
 
   const filteredPapers = useMemo(() => {
     if (activeFilters.length === 0) return papers;
