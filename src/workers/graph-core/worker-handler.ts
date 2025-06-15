@@ -81,15 +81,15 @@ export function setupWorkerMessageHandler() {
             console.log('--- [Worker] Received "graph/extend". Starting Phase C. ---');
             startBatching();
             if (payload) {
+              // --- FIX: Merge the payload from the main thread into the worker's existing state. ---
+              // This preserves the worker's knowledge (like externalIdIndex and masterPaperUid)
+              // while updating it with the latest data from the main thread.
               const currentState = getState();
-              const translatedState = {
+              const mergedState = {
+                ...currentState,
                 ...payload,
-                paperRelationships: payload.paper_relationships || [],
-                masterPaperUid: currentState.masterPaperUid,
-                stubCreationThreshold: currentState.stubCreationThreshold,
               };
-              // --- FIX: Removed the incorrect delete operation ---
-              setState(translatedState);
+              setState(mergedState);
             }
             
             utils.postMessage('app_status/update', { state: 'extending' });
