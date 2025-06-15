@@ -17,16 +17,19 @@ export const MainAnalysisView: React.FC<MainAnalysisViewProps> = ({
   onViewChange, 
   currentView = 'Table' 
 }) => {
-  const { papers, app_status } = useKnowledgeGraphStore();
+  const { papers, app_status, paper_relationships } = useKnowledgeGraphStore();
   
+  // --- DIAGNOSTIC LOGS ---
+  // Let's inspect the data the component is receiving from the store.
+  console.log('[DIAGNOSTIC] All papers in store:', Object.values(papers));
+  console.log('[DIAGNOSTIC] All relationships in store:', paper_relationships);
+  // --- END DIAGNOSTIC LOGS ---
+
   const masterPaper = Object.values(papers).find(paper => !paper.is_stub);
   
-  // *** THIS IS THE FIX FOR THE UI LOGIC ***
-  // We now define processing states for the initial load vs. the background extension.
   const isInitialLoading = ['loading', 'enriching'].includes(app_status.state);
   const isExtending = app_status.state === 'extending';
 
-  // Show the full-page progress bar during the entire initial load (Phases A & B).
   if (isInitialLoading) {
     return (
       <div className="text-center py-20 max-w-2xl mx-auto">
@@ -38,7 +41,6 @@ export const MainAnalysisView: React.FC<MainAnalysisViewProps> = ({
     );
   }
 
-  // If loading is finished but we still have no paper, show an error/empty state.
   if (!masterPaper) {
     return (
       <div className="text-center py-20">
@@ -79,7 +81,6 @@ export const MainAnalysisView: React.FC<MainAnalysisViewProps> = ({
       <div>
         <h2 className="text-2xl font-semibold mb-6">Related Papers</h2>
         
-        {/* Show the inline progress bar ONLY during the 'extending' phase (Phase C) */}
         {isExtending && app_status.message && (
           <ProgressDisplay 
             value={app_status.progress || 0} 

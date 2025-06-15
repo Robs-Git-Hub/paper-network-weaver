@@ -1,3 +1,4 @@
+
 // src/workers/graph-core/types.ts
 
 // Shared types for the graph worker modules
@@ -44,7 +45,6 @@ export interface Authorship {
   institution_uids: string[];
 }
 
-// --- RESOLVED CONFLICT: Using the more flexible 'string' type for future-proofing ---
 export interface PaperRelationship {
   source_short_uid: string;
   target_short_uid: string;
@@ -70,6 +70,8 @@ export interface OpenAlexPaper {
   language?: string;
   authorships?: {
     author_position?: string;
+    // --- FIX: Added the missing 'is_corresponding' property to match the API response. ---
+    is_corresponding?: boolean;
     author?: {
       id?: string;
       display_name: string;
