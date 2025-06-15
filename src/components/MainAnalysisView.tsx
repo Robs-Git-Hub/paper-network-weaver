@@ -19,12 +19,6 @@ export const MainAnalysisView: React.FC<MainAnalysisViewProps> = ({
 }) => {
   const { papers, app_status, paper_relationships } = useKnowledgeGraphStore();
   
-  // --- DIAGNOSTIC LOGS ---
-  // Let's inspect the data the component is receiving from the store.
-  console.log('[DIAGNOSTIC] All papers in store:', Object.values(papers));
-  console.log('[DIAGNOSTIC] All relationships in store:', paper_relationships);
-  // --- END DIAGNOSTIC LOGS ---
-
   const masterPaper = Object.values(papers).find(paper => !paper.is_stub);
   
   const isInitialLoading = ['loading', 'enriching'].includes(app_status.state);
@@ -49,9 +43,17 @@ export const MainAnalysisView: React.FC<MainAnalysisViewProps> = ({
     );
   }
 
+  // --- FIX: Correctly identify related papers using the paper_relationships array. ---
+  // 1. Create a Set of all paper UIDs that are related to the master paper for efficient lookup.
+  const relatedPaperUids = new Set(
+    paper_relationships
+      .filter(r => r.target_short_uid === masterPaper.short_uid)
+      .map(r => r.source_short_uid)
+  );
+
+  // 2. Filter the main papers list to include only those present in our related set.
   const citationPapers = Object.values(papers).filter(paper => 
-    paper.short_uid !== masterPaper.short_uid && 
-    (!paper.is_stub || (paper.relationship_tags && paper.relationship_tags.length > 0))
+    relatedPaperUids.has(paper.short_uid)
   );
   
   const renderCurrentView = () => {
