@@ -20,7 +20,7 @@ import { FileText, ExternalLink, ChevronUp, ChevronDown } from 'lucide-react';
 import { useKnowledgeGraphStore, Paper, Author } from '@/store/knowledge-graph-store';
 import { useIsMobile } from '@/hooks/use-mobile';
 
-// --- PROPS AND HELPER COMPONENTS (Largely Unchanged) ---
+// --- PROPS AND HELPER COMPONENTS (Unchanged) ---
 
 interface CitationsTableProps {
   papers: Paper[];
@@ -68,7 +68,7 @@ const AbstractModal: React.FC<AbstractModalProps> = ({ paper, children }) => {
   );
 };
 
-// --- MAIN TABLE COMPONENT (Completely Rewritten for Performance) ---
+// --- MAIN TABLE COMPONENT (Updated for Dynamic Row Height) ---
 
 export const CitationsTable: React.FC<CitationsTableProps> = ({ papers, showRelationshipTags = false }) => {
   const { authors, authorships } = useKnowledgeGraphStore();
@@ -105,15 +105,14 @@ export const CitationsTable: React.FC<CitationsTableProps> = ({ papers, showRela
     }
   };
 
-  // --- Column Definitions for TanStack Table ---
   const columns = useMemo<ColumnDef<Paper>[]>(() => [
     {
       accessorKey: 'title',
       header: 'Title',
       cell: ({ row }) => (
-        <div className="font-medium line-clamp-2">{row.original.title}</div>
+        <div className="font-medium">{row.original.title}</div> // Removed line-clamp for accurate measurement
       ),
-      size: 384, // max-w-md
+      size: 384,
     },
     {
       id: 'authors',
@@ -154,9 +153,9 @@ export const CitationsTable: React.FC<CitationsTableProps> = ({ papers, showRela
       accessorKey: 'location',
       header: 'Published In',
       cell: ({ row }) => (
-        <div className="line-clamp-1">{row.original.location || 'N/A'}</div>
+        <div>{row.original.location || 'N/A'}</div> // Removed line-clamp
       ),
-      size: 224, // max-w-xs
+      size: 224,
     },
     ...(showRelationshipTags ? [{
       id: 'type',
@@ -198,7 +197,6 @@ export const CitationsTable: React.FC<CitationsTableProps> = ({ papers, showRela
     },
   ], [showRelationshipTags]);
 
-  // --- TanStack Table Instance ---
   const table = useReactTable({
     data: papers,
     columns,
@@ -211,82 +209,69 @@ export const CitationsTable: React.FC<CitationsTableProps> = ({ papers, showRela
   const { rows } = table.getRowModel();
   const parentRef = useRef<HTMLDivElement>(null);
 
-  // --- TanStack Virtualizer Instance ---
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => isMobile ? 220 : 65, // Estimate row height (card vs table row)
+    estimateSize: () => 65, // A reasonable estimate to start with
     overscan: 5,
+    // The key change: enable dynamic measurement
+    measureElement:
+      typeof window !== 'undefined' &&
+      navigator.userAgent.indexOf('Firefox') === -1
+        ? element => element.getBoundingClientRect().height
+        : undefined,
   });
 
   const virtualRows = rowVirtualizer.getVirtualItems();
   const totalSize = rowVirtualizer.getTotalSize();
 
-  // --- Mobile Card Layout (Now Virtualized) ---
+  // Mobile view is less likely to have this issue, so we keep it simple.
   if (isMobile) {
     return (
       <div className="space-y-4">
         <div className="text-sm text-muted-foreground">({rows.length})</div>
-        <div ref={parentRef} className="relative h-[70vh] overflow-y-auto">
-          <div style={{ height: `${totalSize}px` }} className="relative w-full">
-            {virtualRows.map((virtualRow) => {
-              const row = rows[virtualRow.index];
-              const paper = row.original;
-              const paperAuthors = getAuthorsForPaper(paper.short_uid);
-              return (
-                <div
-                  key={row.id}
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    transform: `translateY(${virtualRow.start}px)`,
-                    padding: '0 8px 8px 8px', // Add padding to prevent card overlap
-                  }}
-                >
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-base font-medium leading-tight">{paper.title}</CardTitle>
-                      {showRelationshipTags && paper.relationship_tags && (
-                        <div className="flex flex-wrap gap-1 mt-2">
-                          {paper.relationship_tags.map(tag => (
-                            <Badge key={tag} className={`text-xs ${getRelationshipTagColor(tag)}`}>
-                              {getRelationshipTagLabel(tag)}
-                            </Badge>
-                          ))}
-                        </div>
-                      )}
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <div className="flex flex-wrap gap-1">
-                        {paperAuthors.slice(0, 3).map(author => (
-                          <Badge key={author.short_uid} variant="outline" className="text-xs">{author.clean_name}</Badge>
-                        ))}
-                        {paperAuthors.length > 3 && <span className="text-xs text-muted-foreground">+{paperAuthors.length - 3} more</span>}
-                      </div>
-                      <div className="flex items-center justify-between text-sm text-muted-foreground">
-                        <span>Year: {paper.publication_year || 'N/A'}</span>
-                        <span>Citations: {paper.cited_by_count}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div className="flex gap-2">
-                          {paper.best_oa_url && <Button variant="ghost" size="sm" asChild><a href={paper.best_oa_url} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4 mr-2" />Text</a></Button>}
-                        </div>
-                        {paper.abstract && <AbstractModal paper={paper}><Button variant="ghost" size="sm"><FileText className="h-4 w-4 mr-2" />Abstract</Button></AbstractModal>}
-                      </div>
-                    </CardContent>
-                  </Card>
+        {papers.map((paper) => {
+          const paperAuthors = getAuthorsForPaper(paper.short_uid);
+          return (
+            <Card key={paper.short_uid}>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base font-medium leading-tight">{paper.title}</CardTitle>
+                {showRelationshipTags && paper.relationship_tags && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {paper.relationship_tags.map(tag => (
+                      <Badge key={tag} className={`text-xs ${getRelationshipTagColor(tag)}`}>
+                        {getRelationshipTagLabel(tag)}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex flex-wrap gap-1">
+                  {paperAuthors.slice(0, 3).map(author => (
+                    <Badge key={author.short_uid} variant="outline" className="text-xs">{author.clean_name}</Badge>
+                  ))}
+                  {paperAuthors.length > 3 && <span className="text-xs text-muted-foreground">+{paperAuthors.length - 3} more</span>}
                 </div>
-              );
-            })}
-          </div>
-        </div>
+                <div className="flex items-center justify-between text-sm text-muted-foreground">
+                  <span>Year: {paper.publication_year || 'N/A'}</span>
+                  <span>Citations: {paper.cited_by_count}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex gap-2">
+                    {paper.best_oa_url && <Button variant="ghost" size="sm" asChild><a href={paper.best_oa_url} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4 mr-2" />Text</a></Button>}
+                  </div>
+                  {paper.abstract && <AbstractModal paper={paper}><Button variant="ghost" size="sm"><FileText className="h-4 w-4 mr-2" />Abstract</Button></AbstractModal>}
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
     );
   }
 
-  // --- Desktop Table Layout (Now Virtualized) ---
+  // --- Desktop Table Layout (Updated for Dynamic Row Height) ---
   return (
     <div className="space-y-2">
       <div className="text-sm text-muted-foreground">({rows.length})</div>
@@ -316,17 +301,19 @@ export const CitationsTable: React.FC<CitationsTableProps> = ({ papers, showRela
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() && 'selected'}
+                  // This ref is the key to dynamic measurement
+                  ref={node => rowVirtualizer.measureElement(node)}
+                  data-index={virtualRow.index}
                   style={{
                     position: 'absolute',
                     top: 0,
                     left: 0,
                     width: '100%',
-                    height: `${virtualRow.size}px`,
                     transform: `translateY(${virtualRow.start}px)`,
                   }}
                 >
                   {row.getVisibleCells().map(cell => (
-                    <TableCell key={cell.id} style={{ width: cell.column.getSize() }}>
+                    <TableCell key={cell.id} style={{ width: cell.column.getSize(), verticalAlign: 'top' }} className="p-4">
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </TableCell>
                   ))}
