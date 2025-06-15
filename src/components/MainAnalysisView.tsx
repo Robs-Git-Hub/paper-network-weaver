@@ -1,6 +1,4 @@
 
-// src/components/MainAnalysisView.tsx (Corrected)
-
 import React from 'react';
 import { useKnowledgeGraphStore } from '@/store/knowledge-graph-store';
 import { MasterPaperCard } from '@/components/MasterPaperCard';
@@ -23,11 +21,11 @@ export const MainAnalysisView: React.FC<MainAnalysisViewProps> = ({
   
   const masterPaper = Object.values(papers).find(paper => !paper.is_stub);
   
-  const isLoading = ['loading', 'enriching', 'extending'].includes(app_status.state);
+  const isProcessing = ['loading', 'enriching', 'extending'].includes(app_status.state);
 
+  // Show the full-page progress bar ONLY if the master paper hasn't loaded yet.
   if (!masterPaper) {
-    // If there's no master paper but we are in a loading state, show the progress bar.
-    if (isLoading) {
+    if (isProcessing) {
       return (
         <div className="text-center py-20 max-w-2xl mx-auto">
           <ProgressDisplay 
@@ -44,6 +42,7 @@ export const MainAnalysisView: React.FC<MainAnalysisViewProps> = ({
     );
   }
 
+  // Once the master paper is loaded, the rest of the UI appears.
   const citationPapers = Object.values(papers).filter(paper => 
     paper.short_uid !== masterPaper.short_uid && 
     (!paper.is_stub || (paper.relationship_tags && paper.relationship_tags.length > 0))
@@ -62,7 +61,6 @@ export const MainAnalysisView: React.FC<MainAnalysisViewProps> = ({
 
   return (
     <div className="space-y-8">
-      {/* Desktop Navigation - only visible on desktop */}
       <div className="hidden sm:flex justify-between items-center">
         <TopNav 
           items={['Table', 'Network']} 
@@ -77,7 +75,8 @@ export const MainAnalysisView: React.FC<MainAnalysisViewProps> = ({
       <div>
         <h2 className="text-2xl font-semibold mb-6">Related Papers</h2>
         
-        {isLoading && app_status.message && (
+        {/* Show the inline progress bar ONLY during the 'extending' phase (Phase C) */}
+        {app_status.state === 'extending' && app_status.message && (
           <ProgressDisplay 
             value={app_status.progress || 0} 
             label={app_status.message} 
