@@ -88,7 +88,7 @@ export function setupWorkerMessageHandler() {
                 masterPaperUid: currentState.masterPaperUid,
                 stubCreationThreshold: currentState.stubCreationThreshold,
               };
-              delete (translatedState as any).paper_relationships;
+              // --- FIX: Removed the incorrect delete operation ---
               setState(translatedState);
             }
             
