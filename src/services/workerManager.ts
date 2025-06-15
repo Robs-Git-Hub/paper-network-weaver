@@ -62,7 +62,6 @@ class WorkerManager {
     }
 
     // 2. If there are any batchable messages, apply them all in a SINGLE state update.
-    // This is the core of the performance fix.
     if (batchableMessages.length > 0) {
       this.store.getState().applyMessageBatch(batchableMessages);
     }
@@ -74,10 +73,18 @@ class WorkerManager {
         const { type, payload } = message;
         switch (type) {
           case 'progress/update':
-            storeActions.setAppStatus({ message: payload.message });
+            storeActions.setAppStatus({ 
+              message: payload.message, 
+              progress: payload.progress 
+            });
             break;
           case 'app_status/update':
-            storeActions.setAppStatus({ state: payload.state, message: payload.message });
+            storeActions.setAppStatus({ 
+              state: payload.state, 
+              message: payload.message,
+              // Reset progress when state changes, unless a new progress is provided
+              progress: payload.progress !== undefined ? payload.progress : storeActions.app_status.progress
+            });
             break;
           case 'error/fatal':
             storeActions.setAppStatus({

@@ -65,7 +65,6 @@ export function setupWorkerMessageHandler() {
   self.addEventListener('message', (event: MessageEvent<WorkerMessage>) => {
     const { type, payload } = event.data;
 
-    // This function creates a utils object with our batching logic.
     const getEnhancedUtils = () => {
       const originalUtils = getUtilityFunctions();
       return {
@@ -84,45 +83,38 @@ export function setupWorkerMessageHandler() {
             startBatching();
             
             utils.postMessage('graph/reset', {});
+            utils.postMessage('app_status/update', { state: 'loading' });
+            utils.postMessage('progress/update', { progress: 0, message: 'Initializing analysis...' });
 
             setStubCreationThreshold(payload.stub_creation_threshold || 3);
             
-            utils.postMessage('app_status/update', { state: 'loading', message: 'Processing master paper...' });
-            
             console.log('[Worker] Phase A, Step 1: Processing Master Paper.');
-            
-            const cleanMasterPaper = {
-              ...payload.paper,
-              id: normalizeOpenAlexId(payload.paper.id)
-            };
-            
+            const cleanMasterPaper = { ...payload.paper, id: normalizeOpenAlexId(payload.paper.id) };
             const initialState = getState();
-            const masterUid = await processOpenAlexPaper(
-              cleanMasterPaper, 
-              false, 
-              initialState.papers, 
-              initialState.authors, 
-              initialState.institutions, 
-              initialState.authorships,
-              utils
-            );
+            const masterUid = await processOpenAlexPaper(cleanMasterPaper, false, initialState.papers, initialState.authors, initialState.institutions, initialState.authorships, utils);
             setMasterPaperUid(masterUid);
             console.log('[Worker] Phase A, Step 1: Master Paper processed.');
             
             if (cleanMasterPaper.id) {
+              utils.postMessage('progress/update', { progress: 10, message: 'Fetching direct citations...' });
               await fetchFirstDegreeCitations(cleanMasterPaper.id, getState, utils);              
+              
+              utils.postMessage('progress/update', { progress: 40, message: 'Enriching with external data...' });
               await enrichMasterPaperWithSemanticScholar(getState, utils);
             }
             
             console.log('--- [Worker] Phase A Complete. All initial data has been streamed. ---');
-            
             console.log('--- [Worker] Starting Phase B: Background Enrichment. ---');
-            utils.postMessage('app_status/update', { state: 'enriching', message: null });
+            utils.postMessage('app_status/update', { state: 'enriching' });
             
+            utils.postMessage('progress/update', { progress: 50, message: 'Hydrating master paper details...' });
             await hydrateMasterPaper(getState, utils);
+
+            utils.postMessage('progress/update', { progress: 55, message: 'Reconciling authors...' });
             await performAuthorReconciliation(getState, utils);
             
             console.log('--- [Worker] Phase B Complete. All enrichment finished. ---');
+            utils.postMessage('progress/update', { progress: 70, message: 'Enrichment complete.' });
             utils.postMessage('enrichment/complete', { status: 'success' });
 
           } catch (error) {
@@ -146,7 +138,6 @@ export function setupWorkerMessageHandler() {
             if (payload) {
               console.log('[Worker] Synchronizing and translating state from main thread.');
               const currentState = getState();
-              
               const translatedState = {
                 papers: payload.papers,
                 authors: payload.authors,
@@ -157,16 +148,18 @@ export function setupWorkerMessageHandler() {
                 masterPaperUid: currentState.masterPaperUid,
                 stubCreationThreshold: currentState.stubCreationThreshold
               };
-
               setState(translatedState);
             }
             
-            utils.postMessage('app_status/update', { state: 'extending', message: 'Extending network...' });
-            
+            utils.postMessage('app_status/update', { state: 'extending' });
+            utils.postMessage('progress/update', { progress: 70, message: 'Fetching second-degree citations...' });
             await fetchSecondDegreeCitations(getState, utils);
+
+            utils.postMessage('progress/update', { progress: 90, message: 'Hydrating related papers...' });
             await hydrateStubPapers(getState, utils);
 
             console.log('--- [Worker] Phase C Complete. Graph extension finished. ---');
+            utils.postMessage('progress/update', { progress: 100, message: 'Analysis complete!' });
             utils.postMessage('app_status/update', { state: 'active', message: null });
           } catch (error) {
             console.error('[Worker] Error during graph extension:', error);

@@ -59,6 +59,7 @@ export interface ExternalIdType {
 export interface AppStatus {
   state: 'idle' | 'loading' | 'enriching' | 'extending' | 'active' | 'error';
   message: string | null;
+  progress?: number;
 }
 
 // Used for batch processing messages from the worker
@@ -125,7 +126,8 @@ export const useKnowledgeGraphStore = create<KnowledgeGraphStore>((set, get) => 
   external_id_index: {},
   app_status: {
     state: 'idle',
-    message: null
+    message: null,
+    progress: 0,
   },
 
   // Actions

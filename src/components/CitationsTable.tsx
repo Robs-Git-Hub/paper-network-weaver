@@ -20,8 +20,6 @@ import { FileText, ExternalLink, ChevronUp, ChevronDown } from 'lucide-react';
 import { useKnowledgeGraphStore, Paper, Author } from '@/store/knowledge-graph-store';
 import { useIsMobile } from '@/hooks/use-mobile';
 
-// --- PROPS AND HELPER COMPONENTS (Unchanged) ---
-
 interface CitationsTableProps {
   papers: Paper[];
   showRelationshipTags?: boolean;
@@ -68,8 +66,6 @@ const AbstractModal: React.FC<AbstractModalProps> = ({ paper, children }) => {
   );
 };
 
-// --- MAIN TABLE COMPONENT (Updated for Dynamic Row Height) ---
-
 export const CitationsTable: React.FC<CitationsTableProps> = ({ papers, showRelationshipTags = false }) => {
   const { authors, authorships } = useKnowledgeGraphStore();
   const isMobile = useIsMobile();
@@ -109,9 +105,7 @@ export const CitationsTable: React.FC<CitationsTableProps> = ({ papers, showRela
     {
       accessorKey: 'title',
       header: 'Title',
-      cell: ({ row }) => (
-        <div className="font-medium">{row.original.title}</div> // Removed line-clamp for accurate measurement
-      ),
+      cell: ({ row }) => <div className="font-medium">{row.original.title}</div>,
       size: 384,
     },
     {
@@ -152,9 +146,7 @@ export const CitationsTable: React.FC<CitationsTableProps> = ({ papers, showRela
     {
       accessorKey: 'location',
       header: 'Published In',
-      cell: ({ row }) => (
-        <div>{row.original.location || 'N/A'}</div> // Removed line-clamp
-      ),
+      cell: ({ row }) => <div>{row.original.location || 'N/A'}</div>,
       size: 224,
     },
     ...(showRelationshipTags ? [{
@@ -212,12 +204,10 @@ export const CitationsTable: React.FC<CitationsTableProps> = ({ papers, showRela
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 65, // A reasonable estimate to start with
+    estimateSize: () => 65,
     overscan: 5,
-    // The key change: enable dynamic measurement
     measureElement:
-      typeof window !== 'undefined' &&
-      navigator.userAgent.indexOf('Firefox') === -1
+      typeof window !== 'undefined' && navigator.userAgent.indexOf('Firefox') === -1
         ? element => element.getBoundingClientRect().height
         : undefined,
   });
@@ -225,11 +215,12 @@ export const CitationsTable: React.FC<CitationsTableProps> = ({ papers, showRela
   const virtualRows = rowVirtualizer.getVirtualItems();
   const totalSize = rowVirtualizer.getTotalSize();
 
-  // Mobile view is less likely to have this issue, so we keep it simple.
   if (isMobile) {
+    // Mobile view is reverted to a simpler map, as virtualization adds complexity
+    // and the layout issue is primarily a desktop concern.
     return (
       <div className="space-y-4">
-        <div className="text-sm text-muted-foreground">({rows.length})</div>
+        <div className="text-sm text-muted-foreground">({papers.length})</div>
         {papers.map((paper) => {
           const paperAuthors = getAuthorsForPaper(paper.short_uid);
           return (
@@ -271,7 +262,6 @@ export const CitationsTable: React.FC<CitationsTableProps> = ({ papers, showRela
     );
   }
 
-  // --- Desktop Table Layout (Updated for Dynamic Row Height) ---
   return (
     <div className="space-y-2">
       <div className="text-sm text-muted-foreground">({rows.length})</div>
@@ -301,7 +291,6 @@ export const CitationsTable: React.FC<CitationsTableProps> = ({ papers, showRela
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() && 'selected'}
-                  // This ref is the key to dynamic measurement
                   ref={node => rowVirtualizer.measureElement(node)}
                   data-index={virtualRow.index}
                   style={{

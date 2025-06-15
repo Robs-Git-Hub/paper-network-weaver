@@ -1,14 +1,14 @@
 
 // src/components/MainAnalysisView.tsx (Corrected)
 
-import React, { useEffect, useRef, useState } from 'react';
+import React from 'react';
 import { useKnowledgeGraphStore } from '@/store/knowledge-graph-store';
 import { MasterPaperCard } from '@/components/MasterPaperCard';
 import { UnifiedCitationsTable } from '@/components/UnifiedCitationsTable';
 import { NetworkView } from '@/components/NetworkView';
 import { TopNav } from '@/components/TopNav';
 import { ExportButton } from '@/components/ExportButton';
-import { workerManager } from '@/services/workerManager';
+import { ProgressDisplay } from '@/components/ProgressDisplay';
 
 interface MainAnalysisViewProps {
   onViewChange?: (viewName: string) => void;
@@ -19,17 +19,24 @@ export const MainAnalysisView: React.FC<MainAnalysisViewProps> = ({
   onViewChange, 
   currentView = 'Table' 
 }) => {
-  const { papers, app_status, setAppStatus } = useKnowledgeGraphStore();
+  const { papers, app_status } = useKnowledgeGraphStore();
   
-  // Find the master paper (the one that's not a stub)
   const masterPaper = Object.values(papers).find(paper => !paper.is_stub);
   
-  console.log('[MainAnalysisView] Master paper:', masterPaper);
-  console.log('[MainAnalysisView] All papers:', Object.keys(papers).length);
-
-  // The entire useEffect hook that called workerManager.extendGraph() has been removed.
+  const isLoading = ['loading', 'enriching', 'extending'].includes(app_status.state);
 
   if (!masterPaper) {
+    // If there's no master paper but we are in a loading state, show the progress bar.
+    if (isLoading) {
+      return (
+        <div className="text-center py-20 max-w-2xl mx-auto">
+          <ProgressDisplay 
+            value={app_status.progress || 0} 
+            label={app_status.message || 'Loading...'} 
+          />
+        </div>
+      );
+    }
     return (
       <div className="text-center py-20">
         <p className="text-muted-foreground">No master paper found</p>
@@ -37,14 +44,11 @@ export const MainAnalysisView: React.FC<MainAnalysisViewProps> = ({
     );
   }
 
-  // Get all citation papers (excluding master paper and pure stubs without relationship tags)
   const citationPapers = Object.values(papers).filter(paper => 
     paper.short_uid !== masterPaper.short_uid && 
     (!paper.is_stub || (paper.relationship_tags && paper.relationship_tags.length > 0))
   );
   
-  console.log('[MainAnalysisView] Citation papers raw count:', citationPapers.length);
-
   const renderCurrentView = () => {
     switch (currentView) {
       case 'Table':
@@ -72,6 +76,14 @@ export const MainAnalysisView: React.FC<MainAnalysisViewProps> = ({
       
       <div>
         <h2 className="text-2xl font-semibold mb-6">Related Papers</h2>
+        
+        {isLoading && app_status.message && (
+          <ProgressDisplay 
+            value={app_status.progress || 0} 
+            label={app_status.message} 
+          />
+        )}
+        
         {renderCurrentView()}
       </div>
     </div>
