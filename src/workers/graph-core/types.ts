@@ -45,12 +45,12 @@ export interface Authorship {
   institution_uids: string[];
 }
 
-// --- MODIFIED: Removed 'similar' type for consistency ---
+// --- FIX: Ensured 'similar' is present and made 'tag' a flexible string ---
 export interface PaperRelationship {
   source_short_uid: string;
   target_short_uid: string;
-  relationship_type: 'cites';
-  tag?: '1st_degree' | '2nd_degree' | 'referenced_by_1st_degree';
+  relationship_type: 'cites' | 'similar';
+  tag?: string;
 }
 
 // Worker message types
@@ -105,7 +105,6 @@ export interface OpenAlexPaper {
   related_works?: string[];
 }
 
-// --- MODIFIED: Added optional 'next_cursor' property ---
 export interface OpenAlexSearchResponse {
   results: OpenAlexPaper[];
   meta: {

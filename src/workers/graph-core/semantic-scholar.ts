@@ -2,8 +2,47 @@
 // src/workers/graph-core/semantic-scholar.ts
 
 import { semanticScholarService } from '../../services/semanticScholar';
-import { processSemanticScholarRelationships } from './relationship-builder';
+import { processSemanticScholarPaper } from './entity-processors';
 import type { Paper, GraphState, UtilityFunctions } from './types';
+
+async function processSemanticScholarRelationships(
+  ssData: any,
+  getGraphState: () => GraphState,
+  utils: UtilityFunctions
+) {
+  const { masterPaperUid } = getGraphState();
+  if (!masterPaperUid) return;
+
+  // Process papers that the master paper cites (references)
+  if (ssData.references) {
+    for (const reference of ssData.references) {
+      if (!reference.paperId) continue;
+      const refUid = await processSemanticScholarPaper(reference, utils);
+      utils.postMessage('graph/addRelationship', {
+        relationship: {
+          source_short_uid: masterPaperUid,
+          target_short_uid: refUid,
+          relationship_type: 'cites',
+        },
+      });
+    }
+  }
+
+  // Process papers that cite the master paper
+  if (ssData.citations) {
+    for (const citation of ssData.citations) {
+      if (!citation.paperId) continue;
+      const citationUid = await processSemanticScholarPaper(citation, utils);
+      utils.postMessage('graph/addRelationship', {
+        relationship: {
+          source_short_uid: citationUid,
+          target_short_uid: masterPaperUid,
+          relationship_type: 'cites',
+        },
+      });
+    }
+  }
+}
 
 export async function enrichMasterPaperWithSemanticScholar(
   getGraphState: () => GraphState,
@@ -41,11 +80,9 @@ export async function enrichMasterPaperWithSemanticScholar(
     
     if (Object.keys(updates).length > 0) {
       getGraphState().papers[masterPaperUid] = { ...currentMasterPaper, ...updates };
-      // Stream the update for the master paper
       utils.postMessage('papers/updateOne', { id: masterPaperUid, changes: updates });
     }
     
-    // --- STREAMING CHANGE: Stream new external IDs immediately ---
     if (ssData.paperId) {
       const key = `ss:${ssData.paperId}`;
       utils.addToExternalIndex('ss', ssData.paperId, masterPaperUid);

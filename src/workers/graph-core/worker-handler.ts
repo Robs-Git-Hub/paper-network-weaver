@@ -9,7 +9,6 @@ import { getUtilityFunctions } from './utils';
 import { getState, resetState, setMasterPaperUid, setStubCreationThreshold, setState } from './state';
 import { normalizeOpenAlexId } from '../../services/openAlex-util';
 import type { WorkerMessage } from './types';
-// *** THIS IS THE PATH FIX: Using a relative path instead of the '@/' alias ***
 import { PHASE_A_B_WEIGHTS, PHASE_C_WEIGHTS } from '../../config/progress-weights';
 
 // --- BATCHING LOGIC (Unchanged) ---
@@ -103,8 +102,8 @@ export function setupWorkerMessageHandler() {
 
             const progressAwareUtils = { ...utils, updateAndPostProgress };
 
-            await fetchSecondDegreeCitations(getState, progressAwareUtils);
-            await hydrateStubPapers(getState, progressAwareUtils);
+            await fetchSecondDegreeCitations(getState, progressAwareUtils, PHASE_C_WEIGHTS);
+            await hydrateStubPapers(getState, progressAwareUtils, PHASE_C_WEIGHTS);
 
             console.log('--- [Worker] Phase C Complete. Graph extension finished. ---');
             utils.postMessage('progress/update', { progress: 100, message: 'Analysis complete!' });

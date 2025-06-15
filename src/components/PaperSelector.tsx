@@ -2,22 +2,7 @@
 import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-
-interface PaperResult {
-  id: string;
-  title?: string;
-  display_name?: string;
-  authorships: Array<{
-    author: { display_name: string };
-  }>;
-  publication_year: number | null;
-  primary_location?: {
-    source?: {
-      display_name: string;
-    };
-  };
-  cited_by_count: number;
-}
+import { PaperResult } from '@/types/api'; // --- FIX: Import the shared type
 
 interface PaperSelectorProps {
   papers: PaperResult[];
@@ -53,8 +38,8 @@ export const PaperSelector: React.FC<PaperSelectorProps> = ({
                 
                 <div className="flex items-center gap-2 text-sm text-gray-600">
                   <span>
-                    {paper.authorships.slice(0, 3).map(a => a.author.display_name).join(', ')}
-                    {paper.authorships.length > 3 && ` +${paper.authorships.length - 3} more`}
+                    {paper.authorships?.slice(0, 3).map(a => a.author?.display_name).filter(Boolean).join(', ')}
+                    {paper.authorships && paper.authorships.length > 3 && ` +${paper.authorships.length - 3} more`}
                   </span>
                   {paper.publication_year && (
                     <>

@@ -8,23 +8,7 @@ import { useKnowledgeGraphStore } from '@/store/knowledge-graph-store';
 import { workerManager } from '@/services/workerManager';
 import { openAlexService } from '@/services/openAlex';
 import { Loader2 } from 'lucide-react';
-
-interface PaperResult {
-  id: string;
-  title?: string;
-  display_name?: string;
-  authorships: Array<{
-    author: { display_name: string };
-  }>;
-  publication_year: number | null;
-  primary_location?: {
-    source?: {
-      display_name: string;
-    };
-  };
-  cited_by_count: number;
-  doi?: string;
-}
+import { PaperResult } from '@/types/api'; // --- FIX: Import the shared type
 
 const Index = () => {
   const [searchResults, setSearchResults] = useState<PaperResult[]>([]);
