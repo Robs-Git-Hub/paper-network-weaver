@@ -102,7 +102,6 @@ export async function fetchSecondDegreeCitations(getState: Function, utils: Util
   console.log(`[Worker] Found ${secondDegreeRelationships.length} 2nd degree citations.`);
 }
 
-
 // --- HYDRATE STUB PAPERS ---
 export async function hydrateStubPapers(getState: Function, utils: UtilityFunctions & { updateAndPostProgress: Function }, progressWeights: { HYDRATE_STUBS: number }) {
   console.log('[Worker] Phase C, Step 9: Hydrating stub papers.');
@@ -131,7 +130,6 @@ export async function hydrateStubPapers(getState: Function, utils: UtilityFuncti
   }
   console.log(`[Worker] Successfully hydrated ${stubPapers.length} stub papers.`);
 }
-
 
 // --- HYDRATE MASTER PAPER ---
 export async function hydrateMasterPaper(getState: Function, utils: UtilityFunctions) {

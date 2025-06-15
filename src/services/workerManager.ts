@@ -1,4 +1,3 @@
-
 import { useKnowledgeGraphStore } from '../store/knowledge-graph-store';
 
 interface WorkerMessage {
@@ -15,13 +14,25 @@ class WorkerManager {
       this.worker.terminate();
     }
   
-    this.worker = new Worker(
-      new URL('../workers/enhanced-graph-worker.ts', import.meta.url),
-      { type: 'module' }
-    );
+    try {
+      console.log('[WorkerManager] Initializing worker...');
+      this.worker = new Worker(
+        new URL('../workers/enhanced-graph-worker.ts', import.meta.url),
+        { type: 'module' }
+      );
   
-    this.worker.addEventListener('message', this.handleWorkerMessage.bind(this));
-    this.worker.addEventListener('error', this.handleWorkerError.bind(this));
+      this.worker.addEventListener('message', this.handleWorkerMessage.bind(this));
+      this.worker.addEventListener('error', this.handleWorkerError.bind(this));
+      
+      console.log('[WorkerManager] Worker initialized successfully');
+    } catch (error) {
+      console.error('[WorkerManager] Failed to initialize worker:', error);
+      this.store.getState().setAppStatus({
+        state: 'error',
+        message: `Worker initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      });
+      throw error;
+    }
   }
 
   private handleWorkerMessage(event: MessageEvent<WorkerMessage | WorkerMessage[]>) {
@@ -108,9 +119,16 @@ class WorkerManager {
 
   private handleWorkerError(error: ErrorEvent) {
     console.error('[WorkerManager] Worker error:', error);
+    console.error('[WorkerManager] Error details:', {
+      message: error.message,
+      filename: error.filename,
+      lineno: error.lineno,
+      colno: error.colno,
+      error: error.error
+    });
     this.store.getState().setAppStatus({
       state: 'error',
-      message: 'Worker encountered an error'
+      message: `Worker error: ${error.message || 'Unknown worker error'}`
     });
   }
 

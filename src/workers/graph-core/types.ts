@@ -1,4 +1,3 @@
-
 // src/workers/graph-core/types.ts
 
 // Shared types for the graph worker modules
@@ -45,7 +44,7 @@ export interface Authorship {
   institution_uids: string[];
 }
 
-// --- FIX: Ensured 'similar' is present and made 'tag' a flexible string ---
+// --- RESOLVED CONFLICT: Using the more flexible 'string' type for future-proofing ---
 export interface PaperRelationship {
   source_short_uid: string;
   target_short_uid: string;
