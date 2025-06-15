@@ -7,9 +7,10 @@ import { enrichMasterPaperWithSemanticScholar } from './semantic-scholar';
 import { performAuthorReconciliation } from './author-reconciliation';
 import { getUtilityFunctions } from './utils';
 import { getState, resetState, setMasterPaperUid, setStubCreationThreshold, setState } from './state';
-import { normalizeOpenAlexId } from '../../services/openAlex-util';
+import { normalizeOpenAlexId } from '@/services/openAlex-util';
 import type { WorkerMessage } from './types';
-import { PHASE_A_B_WEIGHTS, PHASE_C_WEIGHTS } from '../../config/progress-weights';
+// *** THIS IS THE PATH FIX: Using the '@/' alias from tsconfig.json ***
+import { PHASE_A_B_WEIGHTS, PHASE_C_WEIGHTS } from '@/config/progress-weights';
 
 // --- BATCHING LOGIC (Unchanged) ---
 let messageQueue: WorkerMessage[] = [];
@@ -82,15 +83,13 @@ export function setupWorkerMessageHandler() {
             startBatching();
             if (payload) {
               const currentState = getState();
-              // *** THIS IS THE FIX FOR THE CRASH ***
-              // We are now correctly mapping paper_relationships to paperRelationships.
               const translatedState = {
                 ...payload,
                 paperRelationships: payload.paper_relationships || [],
                 masterPaperUid: currentState.masterPaperUid,
                 stubCreationThreshold: currentState.stubCreationThreshold,
               };
-              delete (translatedState as any).paper_relationships; // Clean up old key
+              delete (translatedState as any).paper_relationships;
               setState(translatedState);
             }
             
