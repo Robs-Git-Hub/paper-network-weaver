@@ -2,7 +2,7 @@
 import { openAlexService } from '../../services/openAlex';
 import { processOpenAlexPaper } from './entity-processors';
 import { getUtilityFunctions, chunkArray } from './utils';
-import { Paper, PaperRelationship, UtilityFunctions } from './types';
+import { Paper, PaperRelationship, UtilityFunctions, OpenAlexPaper } from './types';
 
 const API_BATCH_SIZE = 100;
 
@@ -106,7 +106,8 @@ export async function fetchSecondDegreeCitations(getState: Function, utils: Util
 export async function hydrateStubPapers(getState: Function, utils: UtilityFunctions & { updateAndPostProgress: Function }, progressWeights: { HYDRATE_STUBS: number }) {
   console.log('[Worker] Phase C, Step 9: Hydrating stub papers.');
   const { papers } = getState();
-  const stubPapers = Object.values(papers).filter((p: any) => p.is_stub);
+  // --- FIX: Explicitly type 'p' as 'Paper' to fix type inference issue. ---
+  const stubPapers = Object.values(papers).filter((p: Paper) => p.is_stub);
   
   if (stubPapers.length === 0) return;
 

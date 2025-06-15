@@ -7,7 +7,6 @@ import { AppHeader } from '@/components/AppHeader';
 import { useKnowledgeGraphStore } from '@/store/knowledge-graph-store';
 import { workerManager } from '@/services/workerManager';
 import { openAlexService } from '@/services/openAlex';
-import { Loader2 } from 'lucide-react';
 import { PaperResult } from '@/types/api'; // --- FIX: Import the shared type
 
 const Index = () => {
@@ -63,22 +62,7 @@ const Index = () => {
     setCurrentView(viewName);
   };
 
-  // Loading state during Phase A
-  if (app_status.state === 'loading') {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto text-[#437e84]" />
-          <div>
-            <h2 className="text-lg font-semibold">Building Knowledge Graph</h2>
-            <p className="text-muted-foreground">
-              {app_status.message || 'Processing your selected paper...'}
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // --- FIX: Removed legacy spinner block. UI is now handled by MainAnalysisView. ---
 
   // Error state
   if (app_status.state === 'error') {
@@ -103,8 +87,9 @@ const Index = () => {
     );
   }
 
+  // --- FIX: Added 'loading' state to this condition to render MainAnalysisView immediately. ---
   // Main analysis view (active or enriching states)
-  if (app_status.state === 'active' || app_status.state === 'enriching' || app_status.state === 'extending') {
+  if (['loading', 'enriching', 'extending', 'active'].includes(app_status.state)) {
     return (
       <div className="min-h-screen bg-background">
         <AppHeader 
