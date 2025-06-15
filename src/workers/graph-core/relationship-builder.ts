@@ -2,7 +2,8 @@
 import { openAlexService } from '../../services/openAlex';
 import { processOpenAlexPaper } from './entity-processors';
 import { getUtilityFunctions, chunkArray } from './utils';
-import { Paper, PaperRelationship, UtilityFunctions, OpenAlexPaper } from './types';
+// --- FIX: Import GraphState to provide strong typing for the worker's state object. ---
+import { Paper, PaperRelationship, UtilityFunctions, GraphState } from './types';
 
 const API_BATCH_SIZE = 100;
 
@@ -61,7 +62,8 @@ export async function fetchFirstDegreeCitations(masterPaperId: string, getState:
 // --- 2nd DEGREE CITATIONS ---
 export async function fetchSecondDegreeCitations(getState: Function, utils: UtilityFunctions & { updateAndPostProgress: Function }, progressWeights: { FETCH_SECOND_DEGREE: number }) {
   console.log('[Worker] Phase C, Step 8: Fetching 2nd degree citations.');
-  const { papers, paperRelationships } = getState();
+  // --- FIX: Assert the return type of getState() to ensure type safety. ---
+  const { papers, paperRelationships, externalIdIndex } = getState() as GraphState;
 
   const firstDegreePaperUids = paperRelationships
     .filter((r: PaperRelationship) => r.tag === '1st_degree')
@@ -71,6 +73,14 @@ export async function fetchSecondDegreeCitations(getState: Function, utils: Util
   
   if (firstDegreePapers.length === 0) return;
 
+  const reverseIndex: Record<string, string> = {};
+  for (const [key, value] of Object.entries(externalIdIndex)) {
+    if (key.startsWith('openalex:')) {
+      const openAlexId = key.substring('openalex:'.length);
+      reverseIndex[value] = openAlexId;
+    }
+  }
+
   const totalCalls = Math.ceil(firstDegreePapers.length / API_BATCH_SIZE);
   const progressPerCall = progressWeights.FETCH_SECOND_DEGREE / totalCalls;
   let callsMade = 0;
@@ -78,7 +88,12 @@ export async function fetchSecondDegreeCitations(getState: Function, utils: Util
   const chunks = chunkArray(firstDegreePapers, API_BATCH_SIZE);
 
   for (const chunk of chunks) {
-    const workIds = chunk.map((p: Paper) => p.short_uid);
+    const workIds = chunk
+      .map((p: Paper) => reverseIndex[p.short_uid])
+      .filter(Boolean);
+
+    if (workIds.length === 0) continue;
+
     const response = await openAlexService.fetchCitationsForMultiplePapers(workIds);
     const allCitations = response.results;
 
@@ -105,11 +120,19 @@ export async function fetchSecondDegreeCitations(getState: Function, utils: Util
 // --- HYDRATE STUB PAPERS ---
 export async function hydrateStubPapers(getState: Function, utils: UtilityFunctions & { updateAndPostProgress: Function }, progressWeights: { HYDRATE_STUBS: number }) {
   console.log('[Worker] Phase C, Step 9: Hydrating stub papers.');
-  const { papers } = getState();
-  // --- FIX: Explicitly type 'p' as 'Paper' to fix type inference issue. ---
+  // --- FIX: Assert the return type of getState() to ensure type safety. ---
+  const { papers, externalIdIndex } = getState() as GraphState;
   const stubPapers = Object.values(papers).filter((p: Paper) => p.is_stub);
   
   if (stubPapers.length === 0) return;
+
+  const reverseIndex: Record<string, string> = {};
+  for (const [key, value] of Object.entries(externalIdIndex)) {
+    if (key.startsWith('openalex:')) {
+      const openAlexId = key.substring('openalex:'.length);
+      reverseIndex[value] = openAlexId;
+    }
+  }
 
   const totalCalls = Math.ceil(stubPapers.length / API_BATCH_SIZE);
   const progressPerCall = progressWeights.HYDRATE_STUBS / totalCalls;
@@ -118,7 +141,12 @@ export async function hydrateStubPapers(getState: Function, utils: UtilityFuncti
   const chunks = chunkArray(stubPapers, API_BATCH_SIZE);
 
   for (const chunk of chunks) {
-    const workIds = chunk.map((p: Paper) => p.short_uid);
+    const workIds = chunk
+      .map((p: Paper) => reverseIndex[p.short_uid])
+      .filter(Boolean);
+
+    if (workIds.length === 0) continue;
+
     const response = await openAlexService.fetchMultiplePapers(workIds);
     const hydratedPapers = response.results;
 
