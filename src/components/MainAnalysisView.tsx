@@ -21,20 +21,25 @@ export const MainAnalysisView: React.FC<MainAnalysisViewProps> = ({
   
   const masterPaper = Object.values(papers).find(paper => !paper.is_stub);
   
-  const isProcessing = ['loading', 'enriching', 'extending'].includes(app_status.state);
+  // *** THIS IS THE FIX FOR THE UI LOGIC ***
+  // We now define processing states for the initial load vs. the background extension.
+  const isInitialLoading = ['loading', 'enriching'].includes(app_status.state);
+  const isExtending = app_status.state === 'extending';
 
-  // Show the full-page progress bar ONLY if the master paper hasn't loaded yet.
+  // Show the full-page progress bar during the entire initial load (Phases A & B).
+  if (isInitialLoading) {
+    return (
+      <div className="text-center py-20 max-w-2xl mx-auto">
+        <ProgressDisplay 
+          value={app_status.progress || 0} 
+          label={app_status.message || 'Loading...'} 
+        />
+      </div>
+    );
+  }
+
+  // If loading is finished but we still have no paper, show an error/empty state.
   if (!masterPaper) {
-    if (isProcessing) {
-      return (
-        <div className="text-center py-20 max-w-2xl mx-auto">
-          <ProgressDisplay 
-            value={app_status.progress || 0} 
-            label={app_status.message || 'Loading...'} 
-          />
-        </div>
-      );
-    }
     return (
       <div className="text-center py-20">
         <p className="text-muted-foreground">No master paper found</p>
@@ -42,7 +47,6 @@ export const MainAnalysisView: React.FC<MainAnalysisViewProps> = ({
     );
   }
 
-  // Once the master paper is loaded, the rest of the UI appears.
   const citationPapers = Object.values(papers).filter(paper => 
     paper.short_uid !== masterPaper.short_uid && 
     (!paper.is_stub || (paper.relationship_tags && paper.relationship_tags.length > 0))
@@ -76,7 +80,7 @@ export const MainAnalysisView: React.FC<MainAnalysisViewProps> = ({
         <h2 className="text-2xl font-semibold mb-6">Related Papers</h2>
         
         {/* Show the inline progress bar ONLY during the 'extending' phase (Phase C) */}
-        {app_status.state === 'extending' && app_status.message && (
+        {isExtending && app_status.message && (
           <ProgressDisplay 
             value={app_status.progress || 0} 
             label={app_status.message} 

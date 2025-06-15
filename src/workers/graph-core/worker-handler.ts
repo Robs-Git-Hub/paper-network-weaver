@@ -82,19 +82,26 @@ export function setupWorkerMessageHandler() {
             startBatching();
             if (payload) {
               const currentState = getState();
-              setState({ ...payload, masterPaperUid: currentState.masterPaperUid, stubCreationThreshold: currentState.stubCreationThreshold });
+              // *** THIS IS THE FIX FOR THE CRASH ***
+              // We are now correctly mapping paper_relationships to paperRelationships.
+              const translatedState = {
+                ...payload,
+                paperRelationships: payload.paper_relationships || [],
+                masterPaperUid: currentState.masterPaperUid,
+                stubCreationThreshold: currentState.stubCreationThreshold,
+              };
+              delete (translatedState as any).paper_relationships; // Clean up old key
+              setState(translatedState);
             }
             
             utils.postMessage('app_status/update', { state: 'extending' });
             
-            // --- WEIGHTED PROGRESS CALCULATION ---
             let overallProgress = PHASE_A_B_WEIGHTS.COMPLETE;
             const updateAndPostProgress = (stepProgress: number, message: string) => {
               overallProgress += stepProgress;
               utils.postMessage('progress/update', { progress: Math.min(overallProgress, 99), message });
             };
 
-            // Pass the progress updater function to the data fetching methods
             const progressAwareUtils = { ...utils, updateAndPostProgress };
 
             await fetchSecondDegreeCitations(getState, progressAwareUtils);
