@@ -2,12 +2,12 @@
 import { reconstructAbstract, extractKeywords, normalizeDoi, generateShortUid } from '../../utils/data-transformers';
 import { normalizeOpenAlexId } from '../../services/openAlex-util';
 import { addToExternalIndex, findByExternalId } from './utils';
-import type { Paper, Author, Institution, Authorship, UtilityFunctions } from './types';
+import type { Paper, Author, Institution, Authorship, UtilityFunctions, OpenAlexPaper } from './types';
 
 // Entity processing functions
 
 export async function processOpenAlexPaper(
-  paperData: any, 
+  paperData: OpenAlexPaper, 
   isStub = false,
   papers: Record<string, Paper>,
   authors: Record<string, Author>,
@@ -17,6 +17,7 @@ export async function processOpenAlexPaper(
 ): Promise<string> {
   let paperUid: string | null = null;
 
+  // Step 1: Find the internal UID from the external ID index, if it exists.
   if (paperData.doi) {
     const normalizedDoi = normalizeDoi(paperData.doi);
     if (normalizedDoi) {
@@ -27,8 +28,14 @@ export async function processOpenAlexPaper(
     paperUid = findByExternalId('openalex', paperData.id);
   }
 
-  if (!paperUid) {
-    paperUid = generateShortUid();
+  // Step 2: Get the actual paper object from our state, if it exists.
+  const existingPaper = paperUid ? papers[paperUid] : null;
+
+  // --- FIX: This new logic robustly handles creation vs. updates. ---
+  // It correctly handles the case where an ID exists in the index but the paper object does not.
+  if (!existingPaper) {
+    // CREATE NEW: This branch runs if the paper is completely new, OR if it was indexed but not created.
+    paperUid = paperUid || generateShortUid(); // Use the found UID or generate a new one.
     const newPaper: Paper = {
       short_uid: paperUid,
       title: paperData.title || paperData.display_name || 'Untitled',
@@ -49,11 +56,35 @@ export async function processOpenAlexPaper(
     papers[paperUid] = newPaper;
     utils.postMessage('graph/addPaper', { paper: newPaper });
   } else {
-    if (!isStub && papers[paperUid].is_stub) {
-      papers[paperUid].is_stub = false;
+    // UPDATE EXISTING: This branch runs if we are hydrating a stub.
+    paperUid = existingPaper.short_uid; // Ensure paperUid is not null.
+    if (!isStub && existingPaper.is_stub) {
+      const changes: Partial<Paper> = {
+        is_stub: false,
+        title: paperData.title || paperData.display_name || existingPaper.title,
+        publication_year: paperData.publication_year || existingPaper.publication_year,
+        publication_date: paperData.publication_date || existingPaper.publication_date,
+        location: paperData.primary_location?.source?.display_name || existingPaper.location,
+        abstract: reconstructAbstract(paperData.abstract_inverted_index) || existingPaper.abstract,
+        fwci: paperData.fwci || existingPaper.fwci,
+        cited_by_count: paperData.cited_by_count || existingPaper.cited_by_count,
+        type: paperData.type || existingPaper.type,
+        language: paperData.language || existingPaper.language,
+        keywords: extractKeywords(paperData.keywords).length > 0 ? extractKeywords(paperData.keywords) : existingPaper.keywords,
+        best_oa_url: paperData.open_access?.oa_url || existingPaper.best_oa_url,
+        oa_status: paperData.open_access?.oa_status || existingPaper.oa_status,
+      };
+      papers[paperUid] = { ...existingPaper, ...changes };
+      utils.postMessage('papers/updateOne', { id: paperUid, changes });
     }
   }
+  
+  if (!paperUid) {
+    // This state should now be impossible, but it's a good safeguard.
+    throw new Error("Critical error: paperUid is null after processing.");
+  }
 
+  // Add entries to the external ID index
   if (paperData.id) {
     const cleanId = normalizeOpenAlexId(paperData.id);
     const key = `openalex:${cleanId}`;
@@ -73,9 +104,12 @@ export async function processOpenAlexPaper(
     }
   }
 
+  // Process authorships for full (non-stub) papers
   if (!isStub && paperData.authorships) {
     for (let i = 0; i < paperData.authorships.length; i++) {
       const authorship = paperData.authorships[i];
+      if (!authorship.author) continue; // Safeguard for missing author data
+      
       const authorUid = await processOpenAlexAuthor(authorship.author, isStub, authors, utils);
       
       const authorshipKey = `${paperUid}_${authorUid}`;
@@ -221,7 +255,6 @@ export async function processOpenAlexInstitution(
     const cleanId = normalizeOpenAlexId(instData.id);
     const key = `openalex_institution:${cleanId}`;
     addToExternalIndex('openalex_institution', cleanId, instUid);
-    // --- FIX: Corrected typo from authorUid to instUid ---
     utils.postMessage('graph/setExternalId', { key, uid: instUid });
   }
 
