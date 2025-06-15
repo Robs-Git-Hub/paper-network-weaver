@@ -7,10 +7,10 @@ import { enrichMasterPaperWithSemanticScholar } from './semantic-scholar';
 import { performAuthorReconciliation } from './author-reconciliation';
 import { getUtilityFunctions } from './utils';
 import { getState, resetState, setMasterPaperUid, setStubCreationThreshold, setState } from './state';
-import { normalizeOpenAlexId } from '@/services/openAlex-util';
+import { normalizeOpenAlexId } from '../../services/openAlex-util';
 import type { WorkerMessage } from './types';
-// *** THIS IS THE PATH FIX: Using the '@/' alias from tsconfig.json ***
-import { PHASE_A_B_WEIGHTS, PHASE_C_WEIGHTS } from '@/config/progress-weights';
+// *** THIS IS THE PATH FIX: Using a relative path instead of the '@/' alias ***
+import { PHASE_A_B_WEIGHTS, PHASE_C_WEIGHTS } from '../../config/progress-weights';
 
 // --- BATCHING LOGIC (Unchanged) ---
 let messageQueue: WorkerMessage[] = [];

@@ -1,9 +1,9 @@
 
-import { openAlexService } from '@/services/openAlex';
+import { openAlexService } from '../../services/openAlex';
 import { processOpenAlexPaper } from './entity-processors';
 import { getUtilityFunctions, chunkArray } from './utils';
 import { Paper, PaperRelationship, UtilityFunctions } from './types';
-import { PHASE_C_WEIGHTS } from '@/config/progress-weights';
+import { PHASE_C_WEIGHTS } from '../../config/progress-weights';
 
 const API_BATCH_SIZE = 100;
 
