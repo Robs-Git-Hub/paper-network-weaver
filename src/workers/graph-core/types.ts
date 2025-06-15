@@ -1,4 +1,3 @@
-
 // src/workers/graph-core/types.ts
 
 // Shared types for the graph worker modules
@@ -45,11 +44,11 @@ export interface Authorship {
   institution_uids: string[];
 }
 
-// --- MODIFIED: Removed 'similar' type for consistency ---
+// --- FIXED: Added 'similar' type back for consistency ---
 export interface PaperRelationship {
   source_short_uid: string;
   target_short_uid: string;
-  relationship_type: 'cites';
+  relationship_type: 'cites' | 'similar';
   tag?: '1st_degree' | '2nd_degree' | 'referenced_by_1st_degree';
 }
 

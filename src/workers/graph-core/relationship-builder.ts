@@ -3,7 +3,6 @@ import { openAlexService } from '../../services/openAlex';
 import { processOpenAlexPaper } from './entity-processors';
 import { getUtilityFunctions, chunkArray } from './utils';
 import { Paper, PaperRelationship, UtilityFunctions } from './types';
-import { PHASE_C_WEIGHTS } from '../../config/progress-weights';
 
 const API_BATCH_SIZE = 100;
 
@@ -60,7 +59,7 @@ export async function fetchFirstDegreeCitations(masterPaperId: string, getState:
 }
 
 // --- 2nd DEGREE CITATIONS ---
-export async function fetchSecondDegreeCitations(getState: Function, utils: UtilityFunctions & { updateAndPostProgress: Function }) {
+export async function fetchSecondDegreeCitations(getState: Function, utils: UtilityFunctions & { updateAndPostProgress: Function }, progressWeights: { FETCH_SECOND_DEGREE: number }) {
   console.log('[Worker] Phase C, Step 8: Fetching 2nd degree citations.');
   const { papers, paperRelationships } = getState();
 
@@ -73,13 +72,12 @@ export async function fetchSecondDegreeCitations(getState: Function, utils: Util
   if (firstDegreePapers.length === 0) return;
 
   const totalCalls = Math.ceil(firstDegreePapers.length / API_BATCH_SIZE);
-  const progressPerCall = PHASE_C_WEIGHTS.FETCH_SECOND_DEGREE / totalCalls;
+  const progressPerCall = progressWeights.FETCH_SECOND_DEGREE / totalCalls;
   let callsMade = 0;
 
   const chunks = chunkArray(firstDegreePapers, API_BATCH_SIZE);
 
   for (const chunk of chunks) {
-    // *** THIS IS THE TYPE FIX ***
     const workIds = chunk.map((p: Paper) => p.short_uid);
     const response = await openAlexService.fetchCitationsForMultiplePapers(workIds);
     const allCitations = response.results;
@@ -104,9 +102,8 @@ export async function fetchSecondDegreeCitations(getState: Function, utils: Util
   console.log(`[Worker] Found ${secondDegreeRelationships.length} 2nd degree citations.`);
 }
 
-
 // --- HYDRATE STUB PAPERS ---
-export async function hydrateStubPapers(getState: Function, utils: UtilityFunctions & { updateAndPostProgress: Function }) {
+export async function hydrateStubPapers(getState: Function, utils: UtilityFunctions & { updateAndPostProgress: Function }, progressWeights: { HYDRATE_STUBS: number }) {
   console.log('[Worker] Phase C, Step 9: Hydrating stub papers.');
   const { papers } = getState();
   const stubPapers = Object.values(papers).filter((p: Paper) => p.is_stub);
@@ -114,13 +111,12 @@ export async function hydrateStubPapers(getState: Function, utils: UtilityFuncti
   if (stubPapers.length === 0) return;
 
   const totalCalls = Math.ceil(stubPapers.length / API_BATCH_SIZE);
-  const progressPerCall = PHASE_C_WEIGHTS.HYDRATE_STUBS / totalCalls;
+  const progressPerCall = progressWeights.HYDRATE_STUBS / totalCalls;
   let callsMade = 0;
 
   const chunks = chunkArray(stubPapers, API_BATCH_SIZE);
 
   for (const chunk of chunks) {
-    // *** THIS IS THE TYPE FIX ***
     const workIds = chunk.map((p: Paper) => p.short_uid);
     const response = await openAlexService.fetchMultiplePapers(workIds);
     const hydratedPapers = response.results;
@@ -134,7 +130,6 @@ export async function hydrateStubPapers(getState: Function, utils: UtilityFuncti
   }
   console.log(`[Worker] Successfully hydrated ${stubPapers.length} stub papers.`);
 }
-
 
 // --- HYDRATE MASTER PAPER ---
 export async function hydrateMasterPaper(getState: Function, utils: UtilityFunctions) {
