@@ -43,18 +43,22 @@ export const MainAnalysisView: React.FC<MainAnalysisViewProps> = ({
     );
   }
 
-  // --- FIX: Correctly identify related papers using the paper_relationships array. ---
-  // 1. Create a Set of all paper UIDs that are related to the master paper for efficient lookup.
+  // --- START: GRANULAR DIAGNOSTIC LOGS ---
+  console.log('[DIAGNOSTIC] Master Paper Found:', masterPaper);
+  console.log('[DIAGNOSTIC] All Relationships:', paper_relationships);
+
   const relatedPaperUids = new Set(
     paper_relationships
       .filter(r => r.target_short_uid === masterPaper.short_uid)
       .map(r => r.source_short_uid)
   );
+  console.log('[DIAGNOSTIC] Set of Related Paper UIDs:', relatedPaperUids);
 
-  // 2. Filter the main papers list to include only those present in our related set.
   const citationPapers = Object.values(papers).filter(paper => 
     relatedPaperUids.has(paper.short_uid)
   );
+  console.log('[DIAGNOSTIC] Final Filtered citationPapers:', citationPapers);
+  // --- END: GRANULAR DIAGNOSTIC LOGS ---
   
   const renderCurrentView = () => {
     switch (currentView) {
