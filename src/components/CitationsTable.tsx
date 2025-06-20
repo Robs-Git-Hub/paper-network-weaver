@@ -18,8 +18,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from '@/components/ui/drawer';
 import { FileText, ExternalLink, ChevronUp, ChevronDown } from 'lucide-react';
 import { Paper } from '@/store/knowledge-graph-store';
-import { EnrichedPaper } from './MainAnalysisView';
 import { useIsMobile } from '@/hooks/use-mobile';
+// FIX: Import the EnrichedPaper type from its new central location.
+import { EnrichedPaper } from '@/types';
 
 interface CitationsTableProps {
   papers: EnrichedPaper[];

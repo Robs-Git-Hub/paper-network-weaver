@@ -2,8 +2,9 @@
 import React from 'react';
 import { useRelationshipFilters } from '@/hooks/useRelationshipFilters';
 import { Button } from '@/components/ui/button';
-import { EnrichedPaper } from './MainAnalysisView';
 import { CitationsTable } from './CitationsTable';
+// FIX: Import the EnrichedPaper type from its new central location.
+import { EnrichedPaper } from '@/types';
 
 interface UnifiedCitationsTableProps {
   papers: EnrichedPaper[];

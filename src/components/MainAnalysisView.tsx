@@ -1,28 +1,59 @@
 
-import React from 'react';
-import { useKnowledgeGraphStore } from '@/store/knowledge-graph-store';
+import React, { useMemo } from 'react';
+import { useKnowledgeGraphStore, Paper, Author } from '@/store/knowledge-graph-store';
 import { MasterPaperCard } from '@/components/MasterPaperCard';
 import { UnifiedCitationsTable } from '@/components/UnifiedCitationsTable';
 import { NetworkView } from '@/components/NetworkView';
 import { TopNav } from '@/components/TopNav';
 import { ExportButton } from '@/components/ExportButton';
 import { ProgressDisplay } from '@/components/ProgressDisplay';
+// FIX: Import the EnrichedPaper type from its new central location.
+import { EnrichedPaper } from '@/types';
 
 interface MainAnalysisViewProps {
   onViewChange?: (viewName: string) => void;
   currentView?: string;
 }
 
+// NOTE: The EnrichedPaper interface has been moved to src/types/index.ts
+
 export const MainAnalysisView: React.FC<MainAnalysisViewProps> = ({ 
   onViewChange, 
   currentView = 'Table' 
 }) => {
-  const { papers, app_status, paper_relationships } = useKnowledgeGraphStore();
+  const { papers, authors, authorships, relation_to_master, app_status } = useKnowledgeGraphStore();
   
-  const masterPaper = Object.values(papers).find(paper => !paper.is_stub);
+  const masterPaper = Object.values(papers).find(paper => !paper.is_stub && paper.publication_year);
   
   const isInitialLoading = ['loading', 'enriching'].includes(app_status.state);
   const isExtending = app_status.state === 'extending';
+
+  const enrichedRelatedPapers = useMemo<EnrichedPaper[]>(() => {
+    if (!masterPaper) return [];
+
+    const relatedPaperUids = Object.keys(relation_to_master);
+
+    return relatedPaperUids
+      .map(uid => papers[uid])
+      .filter((paper): paper is Paper => !!paper)
+      .map(paper => {
+        const paperAuthorships = Object.values(authorships).filter(
+          auth => auth.paper_short_uid === paper.short_uid
+        );
+        const paperAuthors = paperAuthorships
+          .sort((a, b) => a.author_position - b.author_position)
+          .map(auth => authors[auth.author_short_uid])
+          .filter((author): author is Author => !!author);
+
+        const tags = relation_to_master[paper.short_uid] || [];
+
+        return {
+          ...paper,
+          authors: paperAuthors,
+          relationship_tags: tags,
+        };
+      });
+  }, [papers, authors, authorships, relation_to_master, masterPaper]);
 
   if (isInitialLoading) {
     return (
@@ -38,29 +69,19 @@ export const MainAnalysisView: React.FC<MainAnalysisViewProps> = ({
   if (!masterPaper) {
     return (
       <div className="text-center py-20">
-        <p className="text-muted-foreground">No master paper found</p>
+        <p className="text-muted-foreground">No master paper found or analysis failed</p>
       </div>
     );
   }
-
-  const relatedPaperUids = new Set(
-    paper_relationships
-      .filter(r => r.target_short_uid === masterPaper.short_uid)
-      .map(r => r.source_short_uid)
-  );
-
-  const citationPapers = Object.values(papers).filter(paper => 
-    relatedPaperUids.has(paper.short_uid)
-  );
   
   const renderCurrentView = () => {
     switch (currentView) {
       case 'Table':
-        return <UnifiedCitationsTable papers={citationPapers} />;
+        return <UnifiedCitationsTable papers={enrichedRelatedPapers} />;
       case 'Network':
-        return <NetworkView papers={citationPapers} masterPaper={masterPaper} />;
+        return <NetworkView papers={enrichedRelatedPapers} masterPaper={masterPaper} />;
       default:
-        return <UnifiedCitationsTable papers={citationPapers} />;
+        return <UnifiedCitationsTable papers={enrichedRelatedPapers} />;
     }
   };
 
