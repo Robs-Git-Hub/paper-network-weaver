@@ -3,7 +3,7 @@ import React from 'react';
 import { useRelationshipFilters } from '@/hooks/useRelationshipFilters';
 import { Button } from '@/components/ui/button';
 import { CitationsTable } from './CitationsTable';
-// FIX: Import the EnrichedPaper type from its new central location.
+// This is the single, correct import for our shared type.
 import { EnrichedPaper } from '@/types';
 
 interface UnifiedCitationsTableProps {

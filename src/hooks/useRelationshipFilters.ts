@@ -1,5 +1,6 @@
 
 import { useState, useMemo } from 'react';
+// REFACTOR: Import `relation_to_master` instead of `paper_relationships`.
 import { useKnowledgeGraphStore } from '@/store/knowledge-graph-store';
 // FIX: Import the EnrichedPaper type from its new central location.
 import { EnrichedPaper } from '@/types';
@@ -15,6 +16,7 @@ export const useRelationshipFilters = (papers: EnrichedPaper[]) => {
   const [activeFilters, setActiveFilters] = useState<string[]>(['1st_degree']);
 
   const filteredPapers = useMemo(() => {
+    // If no filters are active, return all papers provided to the hook.
     if (activeFilters.length === 0) return papers;
     
     return papers.filter(paper => {
