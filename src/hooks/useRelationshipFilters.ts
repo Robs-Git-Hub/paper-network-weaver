@@ -1,6 +1,5 @@
 
 import { useState, useMemo } from 'react';
-// REFACTOR: Import `relation_to_master` instead of `paper_relationships`.
 import { useKnowledgeGraphStore } from '@/store/knowledge-graph-store';
 import type { Paper } from '@/store/knowledge-graph-store';
 
@@ -11,38 +10,48 @@ export const RELATIONSHIP_FILTERS = [
 ];
 
 export const useRelationshipFilters = (papers: Paper[]) => {
-  // REFACTOR: Use the new `relation_to_master` index from the store.
-  const { relation_to_master } = useKnowledgeGraphStore();
+  const { paper_relationships } = useKnowledgeGraphStore();
   const [activeFilters, setActiveFilters] = useState<string[]>(['1st_degree']);
 
-  // REFACTOR: The memoized `paperTagsMap` is no longer needed.
-  // The `relation_to_master` object from the store is already in the optimal format.
+  // --- FIX: Create a map of paper UIDs to their relationship tags from the SSoT. ---
+  // This is far more efficient than repeatedly filtering the relationships array.
+  const paperTagsMap = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const rel of paper_relationships) {
+      if (!map.has(rel.source_short_uid)) {
+        map.set(rel.source_short_uid, new Set());
+      }
+      if (rel.tag) {
+        map.get(rel.source_short_uid)!.add(rel.tag);
+      }
+    }
+    return map;
+  }, [paper_relationships]);
 
-  // REFACTOR: Filter papers based on the new, efficient `relation_to_master` index.
+  // --- FIX: Filter papers based on the new, correct paperTagsMap. ---
   const filteredPapers = useMemo(() => {
-    // If no filters are active, return all papers provided to the hook.
     if (activeFilters.length === 0) return papers;
     
     return papers.filter(paper => {
-      // Direct lookup in the index.
-      const tags = relation_to_master[paper.short_uid];
+      const tags = paperTagsMap.get(paper.short_uid);
       if (!tags) return false;
-      // Check if any of the paper's tags match an active filter.
-      return activeFilters.some(filter => tags.includes(filter));
+      return activeFilters.some(filter => tags.has(filter));
     });
-  }, [papers, activeFilters, relation_to_master]);
+  }, [papers, activeFilters, paperTagsMap]);
 
-  // REFACTOR: Calculate filter counts directly from the `relation_to_master` index.
-  // This is more efficient as it no longer needs to iterate over the `papers` array.
-  const filterCounts = useMemo(() => {
+  // --- FIX: Calculate filter counts based on the new, correct paperTagsMap. ---
+  const getFilterCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     RELATIONSHIP_FILTERS.forEach(f => counts[f.value] = 0);
 
-    // Iterate through the tag arrays in our index to build the counts.
-    for (const tags of Object.values(relation_to_master)) {
-      for (const tag of tags) {
-        if (counts[tag] !== undefined) {
-          counts[tag]++;
+    // Iterate through the papers that are actually in the table to get accurate counts
+    for (const paper of papers) {
+      const tags = paperTagsMap.get(paper.short_uid);
+      if (tags) {
+        for (const tag of tags) {
+          if (counts[tag] !== undefined) {
+            counts[tag]++;
+          }
         }
       }
     }
@@ -51,12 +60,12 @@ export const useRelationshipFilters = (papers: Paper[]) => {
       ...filter,
       count: counts[filter.value] || 0
     }));
-  }, [relation_to_master]);
+  }, [papers, paperTagsMap]);
 
   return {
     activeFilters,
     setActiveFilters,
     filteredPapers,
-    filterCounts // NOTE: Renamed from `getFilterCounts` for clarity, as it's a value not a function.
+    filterCounts: getFilterCounts
   };
 };
