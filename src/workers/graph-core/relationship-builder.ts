@@ -20,13 +20,20 @@ export async function fetchFirstDegreeCitations(masterPaperId: string, getState:
     const { papers, authors, institutions, authorships } = getState();
     const citationUid = await processOpenAlexPaper(citation, true, papers, authors, institutions, authorships, utils);
     
+    // REFACTOR: Send two separate messages for the pure graph and the UI context tag.
+    // 1. The pure graph relationship
     utils.postMessage('graph/addRelationship', {
       relationship: {
         source_short_uid: citationUid,
         target_short_uid: getState().masterPaperUid,
         relationship_type: 'cites',
-        tag: '1st_degree'
       }
+    });
+
+    // 2. The UI context tag
+    utils.postMessage('graph/addRelationshipTag', {
+      paperUid: citationUid,
+      tag: '1st_degree'
     });
 
     if (citation.referenced_works) {
@@ -46,13 +53,21 @@ export async function fetchFirstDegreeCitations(masterPaperId: string, getState:
   for (const paperId of commonlyCoCited) {
     const { papers, authors, institutions, authorships } = getState();
     const paperUid = await processOpenAlexPaper({ id: paperId }, true, papers, authors, institutions, authorships, utils);
+    
+    // REFACTOR: Send two separate messages for the pure graph and the UI context tag.
+    // 1. The pure graph relationship
     utils.postMessage('graph/addRelationship', {
       relationship: {
         source_short_uid: paperUid,
         target_short_uid: getState().masterPaperUid,
         relationship_type: 'similar',
-        tag: 'referenced_by_1st_degree'
       }
+    });
+
+    // 2. The UI context tag
+    utils.postMessage('graph/addRelationshipTag', {
+      paperUid: paperUid,
+      tag: 'referenced_by_1st_degree'
     });
   }
   
@@ -62,11 +77,11 @@ export async function fetchFirstDegreeCitations(masterPaperId: string, getState:
 // --- 2nd DEGREE CITATIONS ---
 export async function fetchSecondDegreeCitations(getState: Function, utils: UtilityFunctions & { updateAndPostProgress: Function }, progressWeights: { FETCH_SECOND_DEGREE: number }) {
   console.log('[Worker] Phase C, Step 8: Fetching 2nd degree citations.');
-  // --- FIX: Assert the return type of getState() to ensure type safety. ---
-  const { papers, paperRelationships, externalIdIndex } = getState() as GraphState;
+  const { papers, paperRelationships, externalIdIndex, masterPaperUid } = getState() as GraphState;
 
+  // REFACTOR: Identify 1st degree papers by their direct relationship to the master paper, not a UI tag.
   const firstDegreePaperUids = paperRelationships
-    .filter((r: PaperRelationship) => r.tag === '1st_degree')
+    .filter((r: PaperRelationship) => r.target_short_uid === masterPaperUid && r.relationship_type === 'cites')
     .map((r: PaperRelationship) => r.source_short_uid);
 
   const firstDegreePapers = firstDegreePaperUids.map((uid: string) => papers[uid]).filter(Boolean);
@@ -84,6 +99,7 @@ export async function fetchSecondDegreeCitations(getState: Function, utils: Util
   const totalCalls = Math.ceil(firstDegreePapers.length / API_BATCH_SIZE);
   const progressPerCall = progressWeights.FETCH_SECOND_DEGREE / totalCalls;
   let callsMade = 0;
+  let secondDegreeCount = 0; // REFACTOR: Count found papers locally.
 
   const chunks = chunkArray(firstDegreePapers, API_BATCH_SIZE);
 
@@ -101,20 +117,19 @@ export async function fetchSecondDegreeCitations(getState: Function, utils: Util
       const { papers, authors, institutions, authorships } = getState();
       const citationUid = await processOpenAlexPaper(citation, true, papers, authors, institutions, authorships, utils);
       
-      utils.postMessage('graph/addRelationship', {
-        relationship: {
-          source_short_uid: citationUid,
-          target_short_uid: getState().masterPaperUid,
-          relationship_type: 'cites',
-          tag: '2nd_degree'
-        }
+      // REFACTOR: Only create the UI context tag. Do NOT create a false graph edge to the master paper.
+      // The true relationship (2nd-degree -> 1st-degree) is not created to keep the graph simple.
+      utils.postMessage('graph/addRelationshipTag', {
+        paperUid: citationUid,
+        tag: '2nd_degree'
       });
+      secondDegreeCount++;
     }
     callsMade++;
     utils.updateAndPostProgress(progressPerCall, `Fetching second-degree citations... (${callsMade}/${totalCalls})`);
   }
-  const secondDegreeRelationships = getState().paperRelationships.filter((r: PaperRelationship) => r.tag === '2nd_degree');
-  console.log(`[Worker] Found ${secondDegreeRelationships.length} 2nd degree citations.`);
+
+  console.log(`[Worker] Found ${secondDegreeCount} 2nd degree citations.`);
 }
 
 // --- HYDRATE STUB PAPERS ---
