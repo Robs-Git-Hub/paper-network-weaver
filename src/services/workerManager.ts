@@ -59,7 +59,6 @@ class WorkerManager {
       'graph/addInstitution',
       'graph/addAuthorship',
       'graph/addRelationship',
-      // FIX: Add the missing message type to the list of approved batchable types.
       'graph/addRelationshipTag',
       'graph/setExternalId',
       'papers/updateOne',
@@ -67,7 +66,6 @@ class WorkerManager {
       'graph/applyAuthorMerge',
     ];
 
-    // 1. Sort all incoming messages into two groups: batchable data and immediate statuses.
     for (const message of messages) {
       if (BATCHABLE_TYPES.includes(message.type)) {
         batchableMessages.push(message);
@@ -76,12 +74,10 @@ class WorkerManager {
       }
     }
 
-    // 2. If there are any batchable messages, apply them all in a SINGLE state update.
     if (batchableMessages.length > 0) {
       this.store.getState().applyMessageBatch(batchableMessages);
     }
 
-    // 3. Process all immediate, low-frequency messages individually after the main batch.
     if (immediateMessages.length > 0) {
       const storeActions = this.store.getState();
       for (const message of immediateMessages) {
@@ -156,17 +152,12 @@ class WorkerManager {
     if (!this.worker) {
       throw new Error('Worker not initialized');
     }
-    const currentState = this.store.getState();
+    // FIX: Send a simple command with an empty payload.
+    // We are now trusting the worker to maintain its own state. This fixes
+    // both the performance issue and the "amnesia" bug.
     this.worker.postMessage({
       type: 'graph/extend',
-      payload: {
-        papers: currentState.papers,
-        authors: currentState.authors,
-        institutions: currentState.institutions,
-        authorships: currentState.authorships,
-        paper_relationships: currentState.paper_relationships,
-        external_id_index: currentState.external_id_index,
-      }
+      payload: {} // No more large data blob.
     });
   }
 

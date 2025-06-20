@@ -6,20 +6,18 @@ import { fetchFirstDegreeCitations, fetchSecondDegreeCitations, hydrateStubPaper
 import { enrichMasterPaperWithSemanticScholar } from './semantic-scholar';
 import { performAuthorReconciliation } from './author-reconciliation';
 import { getUtilityFunctions } from './utils';
-import { getState, resetState, setMasterPaperUid, setStubCreationThreshold, setState } from './state';
+import { getState, resetState, setMasterPaperUid, setStubCreationThreshold } from './state';
 import { normalizeOpenAlexId } from '../../services/openAlex-util';
 import type { WorkerMessage } from './types';
 import { PHASE_A_B_WEIGHTS, PHASE_C_WEIGHTS } from '../../config/progress-weights';
 
-// --- BATCHING LOGIC (Unchanged) ---
 let messageQueue: WorkerMessage[] = [];
 let batchIntervalId: ReturnType<typeof setInterval> | null = null;
-const BATCHABLE_TYPES = ['graph/reset', 'graph/addPaper', 'graph/addAuthor', 'graph/addInstitution', 'graph/addAuthorship', 'graph/addRelationship', 'graph/setExternalId', 'papers/updateOne', 'graph/addNodes', 'graph/applyAuthorMerge'];
+const BATCHABLE_TYPES = ['graph/reset', 'graph/addPaper', 'graph/addAuthor', 'graph/addInstitution', 'graph/addAuthorship', 'graph/addRelationship', 'graph/addRelationshipTag', 'graph/setExternalId', 'papers/updateOne', 'graph/addNodes', 'graph/applyAuthorMerge'];
 function flushQueue() { if (messageQueue.length > 0) { self.postMessage(messageQueue); messageQueue = []; } }
 function postMessageWithBatching(type: string, payload: any) { if (BATCHABLE_TYPES.includes(type)) { messageQueue.push({ type, payload }); } else { self.postMessage({ type, payload }); } }
 function startBatching() { if (batchIntervalId === null) { batchIntervalId = setInterval(flushQueue, 250); } }
 function stopBatching() { if (batchIntervalId !== null) { clearInterval(batchIntervalId); batchIntervalId = null; } flushQueue(); }
-// --- BATCHING LOGIC END ---
 
 export function setupWorkerMessageHandler() {
   self.addEventListener('message', (event: MessageEvent<WorkerMessage>) => {
@@ -80,18 +78,12 @@ export function setupWorkerMessageHandler() {
           try {
             console.log('--- [Worker] Received "graph/extend". Starting Phase C. ---');
             startBatching();
-            if (payload) {
-              // --- FIX: Merge the payload from the main thread into the worker's existing state. ---
-              // This preserves the worker's knowledge (like externalIdIndex and masterPaperUid)
-              // while updating it with the latest data from the main thread.
-              const currentState = getState();
-              const mergedState = {
-                ...currentState,
-                ...payload,
-              };
-              setState(mergedState);
-            }
             
+            // FIX: The logic that accepted and merged a payload has been removed.
+            // The worker now trusts its own internal state, which was established
+            // during the initial 'graph/processMasterPaper' task. This makes the
+            // worker truly stateful and preserves the masterPaperUid.
+
             utils.postMessage('app_status/update', { state: 'extending' });
             
             let overallProgress = PHASE_A_B_WEIGHTS.COMPLETE;
