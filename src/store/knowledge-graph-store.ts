@@ -17,7 +17,7 @@ export interface Paper {
   best_oa_url: string | null;
   oa_status: string | null;
   is_stub: boolean;
-  relationship_tags: string[];
+  // relationship_tags has been removed, as this is now handled by `relation_to_master`
 }
 
 export interface Author {
@@ -48,7 +48,7 @@ export interface PaperRelationship {
   source_short_uid: string;
   target_short_uid: string;
   relationship_type: 'cites' | 'similar';
-  tag?: 'referenced_by_1st_degree' | string;
+  // 'tag' has been removed. This is a pure graph relationship now.
 }
 
 export interface ExternalIdType {
@@ -77,6 +77,8 @@ interface KnowledgeGraphStore {
   // === RELATIONSHIP SLICES ===
   authorships: Record<string, Authorship>;
   paper_relationships: PaperRelationship[];
+  // NEW: The UI context index, as per the new architecture.
+  relation_to_master: Record<string, string[]>;
 
   // === DEDUPLICATION INDEX ===
   external_id_index: Record<string, string>;
@@ -116,13 +118,14 @@ interface KnowledgeGraphStore {
   // --- END: NEW BATCH UPDATE ACTION ---
 }
 
-export const useKnowledgeGraphStore = create<KnowledgeGraphStore>((set, get) => ({
+export const useKnowledgeGraphStore = create<KnowledgeGraphStore>((set) => ({
   // Initial state
   papers: {},
   authors: {},
   institutions: {},
   authorships: {},
   paper_relationships: [],
+  relation_to_master: {}, // NEW: Initialize new state
   external_id_index: {},
   app_status: {
     state: 'idle',
@@ -144,6 +147,7 @@ export const useKnowledgeGraphStore = create<KnowledgeGraphStore>((set, get) => 
     institutions: {},
     authorships: {},
     paper_relationships: [],
+    relation_to_master: {}, // NEW: Reset new state
     external_id_index: {},
   }),
 
@@ -236,6 +240,7 @@ export const useKnowledgeGraphStore = create<KnowledgeGraphStore>((set, get) => 
       institutions: { ...state.institutions },
       authorships: { ...state.authorships },
       paper_relationships: [...state.paper_relationships],
+      relation_to_master: { ...state.relation_to_master }, // NEW: Include new state in draft
       external_id_index: { ...state.external_id_index },
     };
 
@@ -250,6 +255,7 @@ export const useKnowledgeGraphStore = create<KnowledgeGraphStore>((set, get) => 
           nextState.institutions = {};
           nextState.authorships = {};
           nextState.paper_relationships = [];
+          nextState.relation_to_master = {}; // NEW: Reset new state
           nextState.external_id_index = {};
           break;
         case 'graph/addPaper':
@@ -267,6 +273,17 @@ export const useKnowledgeGraphStore = create<KnowledgeGraphStore>((set, get) => 
           break;
         case 'graph/addRelationship':
           nextState.paper_relationships.push(payload.relationship);
+          break;
+        // NEW: Handle adding tags to the new UI index
+        case 'graph/addRelationshipTag':
+          const { paperUid, tag } = payload;
+          if (!nextState.relation_to_master[paperUid]) {
+            nextState.relation_to_master[paperUid] = [];
+          }
+          // Avoid duplicate tags
+          if (!nextState.relation_to_master[paperUid].includes(tag)) {
+            nextState.relation_to_master[paperUid].push(tag);
+          }
           break;
         case 'graph/setExternalId':
           nextState.external_id_index[payload.key] = payload.uid;

@@ -18,7 +18,7 @@ export interface Paper {
   best_oa_url: string | null;
   oa_status: string | null;
   is_stub: boolean;
-  relationship_tags: string[];
+  // relationship_tags has been removed.
 }
 
 export interface Author {
@@ -49,7 +49,7 @@ export interface PaperRelationship {
   source_short_uid: string;
   target_short_uid: string;
   relationship_type: 'cites' | 'similar';
-  tag?: string;
+  // 'tag' has been removed to create a pure graph model.
 }
 
 // Worker message types

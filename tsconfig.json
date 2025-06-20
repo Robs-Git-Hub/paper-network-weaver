@@ -9,6 +9,7 @@
     "paths": {
       "@/*": ["./src/*"]
     },
+    "types": ["vite/client", "vitest/globals"],
     "noImplicitAny": false,
     "noUnusedParameters": false,
     "skipLibCheck": true,
