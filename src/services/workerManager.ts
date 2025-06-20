@@ -1,3 +1,4 @@
+
 import { useKnowledgeGraphStore } from '../store/knowledge-graph-store';
 
 interface WorkerMessage {
@@ -36,9 +37,10 @@ class WorkerManager {
   }
 
   private handleWorkerMessage(event: MessageEvent<WorkerMessage | WorkerMessage[]>) {
-    // DIAGNOSTIC: Log the type and size of the incoming message/batch.
     if (Array.isArray(event.data)) {
-      console.log(`[WorkerManager] Received message batch of size ${event.data.length}.`);
+      if (event.data.length > 0) {
+        console.log(`[WorkerManager] Received message batch of size ${event.data.length}.`);
+      }
     } else if (event.data.type) {
       if (!['progress/update'].includes(event.data.type)) {
         console.log(`[WorkerManager] Received single message of type: ${event.data.type}`);
@@ -57,6 +59,8 @@ class WorkerManager {
       'graph/addInstitution',
       'graph/addAuthorship',
       'graph/addRelationship',
+      // FIX: Add the missing message type to the list of approved batchable types.
+      'graph/addRelationshipTag',
       'graph/setExternalId',
       'papers/updateOne',
       'graph/addNodes',
@@ -93,7 +97,6 @@ class WorkerManager {
             storeActions.setAppStatus({ 
               state: payload.state, 
               message: payload.message,
-              // Reset progress when state changes, unless a new progress is provided
               progress: payload.progress !== undefined ? payload.progress : storeActions.app_status.progress
             });
             break;
