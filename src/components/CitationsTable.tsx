@@ -17,12 +17,12 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from '@/components/ui/drawer';
 import { FileText, ExternalLink, ChevronUp, ChevronDown } from 'lucide-react';
-import { useKnowledgeGraphStore, Paper, Author } from '@/store/knowledge-graph-store';
+import { Paper } from '@/store/knowledge-graph-store';
+import { EnrichedPaper } from './MainAnalysisView';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 interface CitationsTableProps {
-  papers: Paper[];
-  showRelationshipTags?: boolean;
+  papers: EnrichedPaper[];
 }
 
 interface AbstractModalProps {
@@ -66,22 +66,11 @@ const AbstractModal: React.FC<AbstractModalProps> = ({ paper, children }) => {
   );
 };
 
-export const CitationsTable: React.FC<CitationsTableProps> = ({ papers, showRelationshipTags = false }) => {
-  const { authors, authorships } = useKnowledgeGraphStore();
+export const CitationsTable: React.FC<CitationsTableProps> = ({ papers }) => {
   const isMobile = useIsMobile();
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'citations', desc: true },
   ]);
-
-  const getAuthorsForPaper = (paperUid: string): Author[] => {
-    const paperAuthorships = Object.values(authorships).filter(
-      auth => auth.paper_short_uid === paperUid
-    );
-    return paperAuthorships
-      .sort((a, b) => a.author_position - b.author_position)
-      .map(auth => authors[auth.author_short_uid])
-      .filter(Boolean);
-  };
 
   const getRelationshipTagLabel = (tag: string) => {
     switch (tag) {
@@ -101,7 +90,7 @@ export const CitationsTable: React.FC<CitationsTableProps> = ({ papers, showRela
     }
   };
 
-  const columns = useMemo<ColumnDef<Paper>[]>(() => [
+  const columns = useMemo<ColumnDef<EnrichedPaper>[]>(() => [
     {
       accessorKey: 'title',
       header: 'Title',
@@ -112,7 +101,7 @@ export const CitationsTable: React.FC<CitationsTableProps> = ({ papers, showRela
       id: 'authors',
       header: 'Authors',
       cell: ({ row }) => {
-        const paperAuthors = getAuthorsForPaper(row.original.short_uid);
+        const paperAuthors = row.original.authors;
         return (
           <div className="flex flex-wrap gap-1">
             {paperAuthors.slice(0, 3).map(author => (
@@ -149,10 +138,10 @@ export const CitationsTable: React.FC<CitationsTableProps> = ({ papers, showRela
       cell: ({ row }) => <div>{row.original.location || 'N/A'}</div>,
       size: 224,
     },
-    ...(showRelationshipTags ? [{
+    {
       id: 'type',
       header: 'Type',
-      cell: ({ row }: { row: { original: Paper }}) => (
+      cell: ({ row }) => (
         <div className="flex flex-wrap gap-1">
           {row.original.relationship_tags?.map(tag => (
             <Badge key={tag} className={`text-xs ${getRelationshipTagColor(tag)}`}>
@@ -162,7 +151,7 @@ export const CitationsTable: React.FC<CitationsTableProps> = ({ papers, showRela
         </div>
       ),
       size: 120,
-    }] : []),
+    },
     {
       id: 'text',
       header: 'Text',
@@ -187,7 +176,7 @@ export const CitationsTable: React.FC<CitationsTableProps> = ({ papers, showRela
       ),
       size: 80,
     },
-  ], [showRelationshipTags]);
+  ], []);
 
   const table = useReactTable({
     data: papers,
@@ -216,18 +205,16 @@ export const CitationsTable: React.FC<CitationsTableProps> = ({ papers, showRela
   const totalSize = rowVirtualizer.getTotalSize();
 
   if (isMobile) {
-    // Mobile view is reverted to a simpler map, as virtualization adds complexity
-    // and the layout issue is primarily a desktop concern.
     return (
       <div className="space-y-4">
         <div className="text-sm text-muted-foreground">({papers.length})</div>
         {papers.map((paper) => {
-          const paperAuthors = getAuthorsForPaper(paper.short_uid);
+          const paperAuthors = paper.authors;
           return (
             <Card key={paper.short_uid}>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base font-medium leading-tight">{paper.title}</CardTitle>
-                {showRelationshipTags && paper.relationship_tags && (
+                {paper.relationship_tags && (
                   <div className="flex flex-wrap gap-1 mt-2">
                     {paper.relationship_tags.map(tag => (
                       <Badge key={tag} className={`text-xs ${getRelationshipTagColor(tag)}`}>

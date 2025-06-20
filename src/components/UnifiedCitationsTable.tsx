@@ -1,44 +1,49 @@
 
 import React from 'react';
-import { CitationsTable } from '@/components/CitationsTable';
-import { FilterControls } from '@/components/FilterControls';
 import { useRelationshipFilters } from '@/hooks/useRelationshipFilters';
-import type { Paper } from '@/store/knowledge-graph-store';
+import { Button } from '@/components/ui/button';
+import { EnrichedPaper } from './MainAnalysisView';
+import { CitationsTable } from './CitationsTable';
 
 interface UnifiedCitationsTableProps {
-  papers: Paper[];
+  papers: EnrichedPaper[];
 }
 
 export const UnifiedCitationsTable: React.FC<UnifiedCitationsTableProps> = ({ papers }) => {
-  const {
-    activeFilters,
-    setActiveFilters,
-    filteredPapers,
-    filterCounts
+  const { 
+    activeFilters, 
+    setActiveFilters, 
+    filteredPapers, 
+    filterCounts 
   } = useRelationshipFilters(papers);
 
-  return (
-    <div className="space-y-6">
-      <FilterControls
-        filters={filterCounts}
-        activeFilters={activeFilters}
-        onFiltersChange={setActiveFilters}
-        totalCount={papers.length}
-        filteredCount={filteredPapers.length}
-      />
+  const handleFilterToggle = (value: string) => {
+    setActiveFilters(prev => 
+      prev.includes(value) 
+        ? prev.filter(f => f !== value) 
+        : [...prev, value]
+    );
+  };
 
-      {filteredPapers.length > 0 ? (
-        <CitationsTable papers={filteredPapers} showRelationshipTags />
-      ) : (
-        <div className="text-center py-8">
-          <p className="text-muted-foreground">
-            {activeFilters.length > 0 && papers.length > 0
-              ? 'No papers match the selected filters'
-              : 'Loading or no related papers found.'
-            }
-          </p>
-        </div>
-      )}
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-2">
+        {filterCounts.map(filter => (
+          <Button
+            key={filter.value}
+            variant={activeFilters.includes(filter.value) ? 'default' : 'outline'}
+            onClick={() => handleFilterToggle(filter.value)}
+            disabled={filter.count === 0}
+            className="flex items-center gap-2"
+          >
+            {filter.label}
+            <span className="text-xs font-mono bg-muted/50 px-1.5 py-0.5 rounded">
+              {filter.count}
+            </span>
+          </Button>
+        ))}
+      </div>
+      <CitationsTable papers={filteredPapers} />
     </div>
   );
 };
