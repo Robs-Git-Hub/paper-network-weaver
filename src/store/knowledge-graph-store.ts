@@ -233,14 +233,13 @@ export const useKnowledgeGraphStore = create<KnowledgeGraphStore>((set) => ({
   // --- START: NEW BATCH UPDATE ACTION IMPLEMENTATION ---
   applyMessageBatch: (batch) => set((state) => {
     // Create mutable drafts of the state slices we will be updating.
-    // This is more performant than spreading the state for every single message in the batch.
     const nextState = {
       papers: { ...state.papers },
       authors: { ...state.authors },
       institutions: { ...state.institutions },
       authorships: { ...state.authorships },
       paper_relationships: [...state.paper_relationships],
-      relation_to_master: { ...state.relation_to_master }, // NEW: Include new state in draft
+      relation_to_master: { ...state.relation_to_master },
       external_id_index: { ...state.external_id_index },
     };
 
@@ -255,7 +254,7 @@ export const useKnowledgeGraphStore = create<KnowledgeGraphStore>((set) => ({
           nextState.institutions = {};
           nextState.authorships = {};
           nextState.paper_relationships = [];
-          nextState.relation_to_master = {}; // NEW: Reset new state
+          nextState.relation_to_master = {};
           nextState.external_id_index = {};
           break;
         case 'graph/addPaper':
@@ -274,13 +273,12 @@ export const useKnowledgeGraphStore = create<KnowledgeGraphStore>((set) => ({
         case 'graph/addRelationship':
           nextState.paper_relationships.push(payload.relationship);
           break;
-        // NEW: Handle adding tags to the new UI index
+        // FIX: Add the missing case to handle the new message type from the worker.
         case 'graph/addRelationshipTag':
           const { paperUid, tag } = payload;
           if (!nextState.relation_to_master[paperUid]) {
             nextState.relation_to_master[paperUid] = [];
           }
-          // Avoid duplicate tags
           if (!nextState.relation_to_master[paperUid].includes(tag)) {
             nextState.relation_to_master[paperUid].push(tag);
           }
@@ -301,8 +299,6 @@ export const useKnowledgeGraphStore = create<KnowledgeGraphStore>((set) => ({
           nextState.paper_relationships.push(...(payload.data.paper_relationships || []));
           break;
         case 'graph/applyAuthorMerge':
-          // This logic is complex, so we'll reuse the existing applyAuthorMerge logic,
-          // but apply it to our draft state `nextState` instead of the original state.
           const { updates, deletions } = payload;
           updates.authors.forEach(({ id, changes }: { id: string, changes: Partial<Author> }) => {
             if (nextState.authors[id]) {
@@ -321,7 +317,6 @@ export const useKnowledgeGraphStore = create<KnowledgeGraphStore>((set) => ({
       }
     }
 
-    // Return the final, updated state. Zustand will handle the single re-render.
     return nextState;
   }),
   // --- END: NEW BATCH UPDATE ACTION IMPLEMENTATION ---
