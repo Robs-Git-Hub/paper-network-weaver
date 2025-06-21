@@ -3,6 +3,7 @@ import { openAlexService } from '../../services/openAlex';
 import { processOpenAlexPaper } from './entity-processors';
 import { getUtilityFunctions, chunkArray } from './utils';
 import { Paper, PaperRelationship, UtilityFunctions, GraphState } from './types';
+import { normalizeOpenAlexId } from '../../services/openAlex-util';
 
 const API_BATCH_SIZE = 100;
 
@@ -47,13 +48,13 @@ export async function fetchFirstDegreeCitations(masterPaperId: string, getState:
     .map(([id]) => id);
 
   for (const paperId of commonlyCoCited) {
+    // FIX: Do not create a co-cited stub for the master paper itself.
+    const cleanPaperId = normalizeOpenAlexId(paperId);
+    if (cleanPaperId === masterPaperId) continue;
+
     const { papers, authors, institutions, authorships } = getState();
     const paperUid = await processOpenAlexPaper({ id: paperId }, true, papers, authors, institutions, authorships, utils);
     
-    // --- NEW DIAGNOSTIC STEP 1 ---
-    console.log(`[DIAGNOSTIC] Created co-cited stub with external ID ${paperId} and internal UID ${paperUid}`);
-    // --- END DIAGNOSTIC STEP 1 ---
-
     utils.postMessage('graph/addRelationshipTag', {
       paperUid: paperUid,
       tag: 'referenced_by_1st_degree'
@@ -64,7 +65,6 @@ export async function fetchFirstDegreeCitations(masterPaperId: string, getState:
 }
 
 // --- 2nd DEGREE CITATIONS ---
-// ... (rest of the function is unchanged, omitted for brevity)
 export async function fetchSecondDegreeCitations(getState: Function, utils: UtilityFunctions & { updateAndPostProgress: Function }, progressWeights: { FETCH_SECOND_DEGREE: number }) {
   console.log('[Worker] Phase C, Step 8: Fetching 2nd degree citations.');
   const { papers, paperRelationships, externalIdIndex, masterPaperUid } = getState() as GraphState;
@@ -88,26 +88,28 @@ export async function fetchSecondDegreeCitations(getState: Function, utils: Util
     }
   }
 
-  const totalCalls = Math.ceil(firstDegreePapers.length / API_BATCH_SIZE);
+  const workIds = firstDegreePapers
+    .map((p: Paper) => reverseIndex[p.short_uid])
+    .filter(Boolean);
+
+  const totalCalls = Math.ceil(workIds.length / API_BATCH_SIZE);
   const progressPerCall = progressWeights.FETCH_SECOND_DEGREE / totalCalls;
   let callsMade = 0;
   let secondDegreeCount = 0;
 
-  const chunks = chunkArray(firstDegreePapers, API_BATCH_SIZE);
+  const chunks = chunkArray(workIds, API_BATCH_SIZE);
 
   for (const chunk of chunks) {
-    const workIds = chunk
-      .map((p: Paper) => reverseIndex[p.short_uid])
-      .filter(Boolean);
+    if (chunk.length === 0) continue;
 
-    if (workIds.length === 0) continue;
-
-    const response = await openAlexService.fetchCitationsForMultiplePapers(workIds);
+    const response = await openAlexService.fetchCitationsForMultiplePapers(chunk);
     const allCitations = response.results;
 
     for (const citation of allCitations) {
-      // Find which 1st-degree paper this 2nd-degree paper cites
-      const cited1stDegreeId = citation.referenced_works.find(id => workIds.includes(id));
+      // FIX: Normalize IDs before comparison to fix the regression.
+      const referencedWorksNormalized = citation.referenced_works.map(id => normalizeOpenAlexId(id));
+      const cited1stDegreeId = chunk.find(id => referencedWorksNormalized.includes(id));
+      
       if (!cited1stDegreeId) continue;
       
       const cited1stDegreeUid = Object.keys(reverseIndex).find(key => reverseIndex[key] === cited1stDegreeId);
@@ -143,11 +145,6 @@ export async function hydrateStubPapers(getState: Function, utils: UtilityFuncti
   console.log('[Worker] Phase C, Step 9: Hydrating stub papers.');
   const { papers, externalIdIndex } = getState() as GraphState;
   const stubPapers = Object.values(papers).filter((p: Paper) => p.is_stub);
-
-  // --- NEW DIAGNOSTIC STEP 2 ---
-  const stubIdsForLog = stubPapers.map(p => p.short_uid);
-  console.log(`[DIAGNOSTIC] Found ${stubPapers.length} stubs to hydrate. IDs:`, stubIdsForLog);
-  // --- END DIAGNOSTIC STEP 2 ---
   
   if (stubPapers.length === 0) return;
 
@@ -186,7 +183,6 @@ export async function hydrateStubPapers(getState: Function, utils: UtilityFuncti
 }
 
 // --- HYDRATE MASTER PAPER ---
-// ... (rest of the function is unchanged, omitted for brevity)
 export async function hydrateMasterPaper(getState: Function, utils: UtilityFunctions) {
   console.log('[Worker] Phase B, Step 4: Hydrating Master Paper from OpenAlex.');
   const { masterPaperUid, papers } = getState();
