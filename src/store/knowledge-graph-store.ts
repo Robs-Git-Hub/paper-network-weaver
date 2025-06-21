@@ -1,5 +1,8 @@
 
+// src/strore/knowledge-graph-store.ts
+
 import { create } from 'zustand';
+import { devtools } from 'zustand/middleware';
 
 // Define the interfaces for the knowledge graph data
 export interface Paper {
@@ -118,7 +121,7 @@ interface KnowledgeGraphStore {
   // --- END: NEW BATCH UPDATE ACTION ---
 }
 
-export const useKnowledgeGraphStore = create<KnowledgeGraphStore>((set) => ({
+export const useKnowledgeGraphStore = create<KnowledgeGraphStore>()(devtools((set) => ({
   // Initial state
   papers: {},
   authors: {},
@@ -320,4 +323,4 @@ export const useKnowledgeGraphStore = create<KnowledgeGraphStore>((set) => ({
     return nextState;
   }),
   // --- END: NEW BATCH UPDATE ACTION IMPLEMENTATION ---
-}));
+}), { name: 'KnowledgeGraphStore' }));
