@@ -51,15 +51,6 @@ export async function fetchFirstDegreeCitations(masterPaperId: string, getState:
     const { papers, authors, institutions, authorships } = getState();
     const paperUid = await processOpenAlexPaper({ id: paperId }, true, papers, authors, institutions, authorships, utils);
     
-    const relationship = {
-      source_short_uid: paperUid,
-      target_short_uid: getState().masterPaperUid,
-      relationship_type: 'similar' as const,
-    };
-    utils.postMessage('graph/addRelationship', { relationship });
-    // FIX: Add the new relationship to the worker's own internal state so it remembers it for Phase C.
-    getState().paperRelationships.push(relationship);
-
     utils.postMessage('graph/addRelationshipTag', {
       paperUid: paperUid,
       tag: 'referenced_by_1st_degree'

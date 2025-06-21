@@ -50,8 +50,8 @@ export interface Authorship {
 export interface PaperRelationship {
   source_short_uid: string;
   target_short_uid: string;
-  relationship_type: 'cites' | 'similar';
-  // 'tag' has been removed. This is a pure graph relationship now.
+  // This type is now restricted, preventing incorrect relationships.
+  relationship_type: 'cites'; 
 }
 
 export interface ExternalIdType {
