@@ -25,17 +25,15 @@ export async function processOpenAlexPaper(
     }
   }
   if (!paperUid && paperData.id) {
-    paperUid = findByExternalId('openalex', paperData.id);
+    paperUid = findByExternalId('openalex', normalizeOpenAlexId(paperData.id));
   }
 
   // Step 2: Get the actual paper object from our state, if it exists.
   const existingPaper = paperUid ? papers[paperUid] : null;
 
-  // --- FIX: This new logic robustly handles creation vs. updates. ---
-  // It correctly handles the case where an ID exists in the index but the paper object does not.
   if (!existingPaper) {
-    // CREATE NEW: This branch runs if the paper is completely new, OR if it was indexed but not created.
-    paperUid = paperUid || generateShortUid(); // Use the found UID or generate a new one.
+    // CREATE NEW: This branch runs if the paper is completely new.
+    paperUid = paperUid || generateShortUid();
     const newPaper: Paper = {
       short_uid: paperUid,
       title: paperData.title || paperData.display_name || 'Untitled',
@@ -51,13 +49,17 @@ export async function processOpenAlexPaper(
       best_oa_url: paperData.open_access?.oa_url || null,
       oa_status: paperData.open_access?.oa_status || null,
       is_stub: isStub,
-      // REMOVED: relationship_tags no longer exists on the Paper type.
     };
     papers[paperUid] = newPaper;
     utils.postMessage('graph/addPaper', { paper: newPaper });
   } else {
-    // UPDATE EXISTING: This branch runs if we are hydrating a stub.
-    paperUid = existingPaper.short_uid; // Ensure paperUid is not null.
+    // UPDATE EXISTING: This branch runs if the paper already exists in our state.
+    paperUid = existingPaper.short_uid;
+
+    // --- NEW DIAGNOSTIC STEP ---
+    console.log(`[DIAGNOSTIC] Checking paper for hydration. UID: ${paperUid}, Title: "${existingPaper.title}". isStub param: ${isStub}. existingPaper.is_stub: ${existingPaper.is_stub}`);
+    // --- END DIAGNOSTIC STEP ---
+
     if (!isStub && existingPaper.is_stub) {
       const changes: Partial<Paper> = {
         is_stub: false,
@@ -74,18 +76,12 @@ export async function processOpenAlexPaper(
         best_oa_url: paperData.open_access?.oa_url || existingPaper.best_oa_url,
         oa_status: paperData.open_access?.oa_status || existingPaper.oa_status,
       };
-
-      // --- DIAGNOSTIC STEP (Still Active) ---
-      console.log(`[DIAGNOSTIC LOG] Hydrating paper ${paperUid}. Applying changes:`, changes);
-      // --- END DIAGNOSTIC STEP ---
-
       papers[paperUid] = { ...existingPaper, ...changes };
       utils.postMessage('papers/updateOne', { id: paperUid, changes });
     }
   }
   
   if (!paperUid) {
-    // This state should now be impossible, but it's a good safeguard.
     throw new Error("Critical error: paperUid is null after processing.");
   }
 
@@ -113,7 +109,7 @@ export async function processOpenAlexPaper(
   if (!isStub && paperData.authorships) {
     for (let i = 0; i < paperData.authorships.length; i++) {
       const authorship = paperData.authorships[i];
-      if (!authorship.author) continue; // Safeguard for missing author data
+      if (!authorship.author) continue;
       
       const authorUid = await processOpenAlexAuthor(authorship.author, isStub, authors, utils);
       
@@ -141,60 +137,6 @@ export async function processOpenAlexPaper(
     }
   }
 
-  return paperUid;
-}
-
-export async function processSemanticScholarPaper(
-  paperData: any,
-  utils: UtilityFunctions
-): Promise<string> {
-  let paperUid: string | null = null;
-
-  const doi = paperData.externalIds?.DOI;
-  if (doi) {
-    paperUid = findByExternalId('doi', doi);
-  }
-  if (!paperUid && paperData.paperId) {
-    paperUid = findByExternalId('ss', paperData.paperId);
-  }
-
-  if (!paperUid) {
-    paperUid = generateShortUid();
-    const newPaper: Paper = {
-      short_uid: paperUid,
-      title: paperData.title || 'Untitled',
-      publication_year: paperData.year || null,
-      publication_date: paperData.year ? `${paperData.year}-01-01` : null,
-      location: paperData.venue || null,
-      abstract: paperData.abstract || null,
-      fwci: null,
-      cited_by_count: paperData.citationCount || 0,
-      type: 'article',
-      language: null,
-      keywords: [],
-      best_oa_url: paperData.openAccessPdf?.url || null,
-      oa_status: paperData.openAccessPdf?.url ? 'green' : 'closed',
-      is_stub: true,
-      // REMOVED: relationship_tags no longer exists on the Paper type.
-    };
-    utils.postMessage('graph/addPaper', { paper: newPaper });
-  }
-
-  if (doi) {
-    const key = `doi:${doi}`;
-    if (!findByExternalId('doi', doi)) {
-      utils.addToExternalIndex('doi', doi, paperUid);
-      utils.postMessage('graph/setExternalId', { key, uid: paperUid });
-    }
-  }
-  if (paperData.paperId) {
-    const key = `ss:${paperData.paperId}`;
-    if (!findByExternalId('ss', paperData.paperId)) {
-      utils.addToExternalIndex('ss', paperData.paperId, paperUid);
-      utils.postMessage('graph/setExternalId', { key, uid: paperUid });
-    }
-  }
-  
   return paperUid;
 }
 

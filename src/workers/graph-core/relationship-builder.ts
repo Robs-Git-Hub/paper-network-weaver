@@ -48,7 +48,6 @@ export async function fetchFirstDegreeCitations(masterPaperId: string, getState:
     .map(([id]) => id);
 
   for (const paperId of commonlyCoCited) {
-    // FIX: Do not create a co-cited stub for the master paper itself.
     const cleanPaperId = normalizeOpenAlexId(paperId);
     if (cleanPaperId === masterPaperId) continue;
 
@@ -106,7 +105,6 @@ export async function fetchSecondDegreeCitations(getState: Function, utils: Util
     const allCitations = response.results;
 
     for (const citation of allCitations) {
-      // FIX: Normalize IDs before comparison to fix the regression.
       const referencedWorksNormalized = citation.referenced_works.map(id => normalizeOpenAlexId(id));
       const cited1stDegreeId = chunk.find(id => referencedWorksNormalized.includes(id));
       
