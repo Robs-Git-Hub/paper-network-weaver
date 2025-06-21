@@ -140,6 +140,61 @@ export async function processOpenAlexPaper(
   return paperUid;
 }
 
+// FIX: Restore the 'export' keyword
+export async function processSemanticScholarPaper(
+  paperData: any,
+  utils: UtilityFunctions
+): Promise<string> {
+  let paperUid: string | null = null;
+
+  const doi = paperData.externalIds?.DOI;
+  if (doi) {
+    paperUid = findByExternalId('doi', doi);
+  }
+  if (!paperUid && paperData.paperId) {
+    paperUid = findByExternalId('ss', paperData.paperId);
+  }
+
+  if (!paperUid) {
+    paperUid = generateShortUid();
+    const newPaper: Paper = {
+      short_uid: paperUid,
+      title: paperData.title || 'Untitled',
+      publication_year: paperData.year || null,
+      publication_date: paperData.year ? `${paperData.year}-01-01` : null,
+      location: paperData.venue || null,
+      abstract: paperData.abstract || null,
+      fwci: null,
+      cited_by_count: paperData.citationCount || 0,
+      type: 'article',
+      language: null,
+      keywords: [],
+      best_oa_url: paperData.openAccessPdf?.url || null,
+      oa_status: paperData.openAccessPdf?.url ? 'green' : 'closed',
+      is_stub: true,
+    };
+    utils.postMessage('graph/addPaper', { paper: newPaper });
+  }
+
+  if (doi) {
+    const key = `doi:${doi}`;
+    if (!findByExternalId('doi', doi)) {
+      utils.addToExternalIndex('doi', doi, paperUid);
+      utils.postMessage('graph/setExternalId', { key, uid: paperUid });
+    }
+  }
+  if (paperData.paperId) {
+    const key = `ss:${paperData.paperId}`;
+    if (!findByExternalId('ss', paperData.paperId)) {
+      utils.addToExternalIndex('ss', paperData.paperId, paperUid);
+      utils.postMessage('graph/setExternalId', { key, uid: paperUid });
+    }
+  }
+  
+  return paperUid;
+}
+
+// FIX: Restore the 'export' keyword
 export async function processOpenAlexAuthor(
   authorData: any, 
   isStub = false,
@@ -174,6 +229,7 @@ export async function processOpenAlexAuthor(
   return authorUid;
 }
 
+// FIX: Restore the 'export' keyword
 export async function processOpenAlexInstitution(
   instData: any,
   institutions: Record<string, Institution>,
