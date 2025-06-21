@@ -51,7 +51,7 @@ export async function processOpenAlexPaper(
       best_oa_url: paperData.open_access?.oa_url || null,
       oa_status: paperData.open_access?.oa_status || null,
       is_stub: isStub,
-      relationship_tags: []
+      // REMOVED: relationship_tags no longer exists on the Paper type.
     };
     papers[paperUid] = newPaper;
     utils.postMessage('graph/addPaper', { paper: newPaper });
@@ -74,6 +74,11 @@ export async function processOpenAlexPaper(
         best_oa_url: paperData.open_access?.oa_url || existingPaper.best_oa_url,
         oa_status: paperData.open_access?.oa_status || existingPaper.oa_status,
       };
+
+      // --- DIAGNOSTIC STEP (Still Active) ---
+      console.log(`[DIAGNOSTIC LOG] Hydrating paper ${paperUid}. Applying changes:`, changes);
+      // --- END DIAGNOSTIC STEP ---
+
       papers[paperUid] = { ...existingPaper, ...changes };
       utils.postMessage('papers/updateOne', { id: paperUid, changes });
     }
@@ -170,7 +175,7 @@ export async function processSemanticScholarPaper(
       best_oa_url: paperData.openAccessPdf?.url || null,
       oa_status: paperData.openAccessPdf?.url ? 'green' : 'closed',
       is_stub: true,
-      relationship_tags: []
+      // REMOVED: relationship_tags no longer exists on the Paper type.
     };
     utils.postMessage('graph/addPaper', { paper: newPaper });
   }
