@@ -13,6 +13,11 @@ async function processSemanticScholarRelationships(
   const { masterPaperUid } = getGraphState();
   if (!masterPaperUid) return;
 
+  // FUTURE: The following block processes papers that the master paper *references*.
+  // This functionality is currently disabled to prevent adding papers from the
+  // master paper's reference list to the graph. It can be re-enabled if this
+  // feature is desired in the future.
+  /*
   // Process papers that the master paper cites (references)
   if (ssData.references) {
     for (const reference of ssData.references) {
@@ -27,6 +32,7 @@ async function processSemanticScholarRelationships(
       });
     }
   }
+  */
 
   // Process papers that cite the master paper
   if (ssData.citations) {
