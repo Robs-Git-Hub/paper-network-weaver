@@ -150,6 +150,11 @@ export async function hydrateStubPapers(getState: Function, utils: UtilityFuncti
     const response = await openAlexService.fetchMultiplePapers(workIds);
     const hydratedPapers = response.results;
 
+    // --- DIAGNOSTIC STEP ---
+    // Log the data returned from the API before we process it.
+    console.log('[DIAGNOSTIC LOG] Raw data from OpenAlex for stub hydration:', hydratedPapers);
+    // --- END DIAGNOSTIC STEP ---
+
     for (const paperData of hydratedPapers) {
       const { papers, authors, institutions, authorships } = getState();
       await processOpenAlexPaper(paperData, false, papers, authors, institutions, authorships, utils);
