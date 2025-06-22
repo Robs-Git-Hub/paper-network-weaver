@@ -17,7 +17,7 @@ export async function processOpenAlexPaper(
 ): Promise<string> {
   let paperUid: string | null = null;
 
-  // Step 1: Find the internal UID from the external ID index, if it exists.
+  // Step 1: Find by external ID
   if (paperData.doi) {
     const normalizedDoi = normalizeDoi(paperData.doi);
     if (normalizedDoi) {
@@ -28,7 +28,7 @@ export async function processOpenAlexPaper(
     paperUid = findByExternalId('openalex', normalizeOpenAlexId(paperData.id));
   }
 
-  // Step 2: Get the actual paper object from our state, if it exists.
+  // Step 2: Get the existing paper object
   const existingPaper = paperUid ? papers[paperUid] : null;
 
   if (!existingPaper) {
@@ -53,16 +53,19 @@ export async function processOpenAlexPaper(
     papers[paperUid] = newPaper;
     utils.postMessage('graph/addPaper', { paper: newPaper });
   } else {
-    // UPDATE EXISTING: This branch runs if the paper already exists in our state.
+    // UPDATE EXISTING: This branch runs if the paper already exists.
     paperUid = existingPaper.short_uid;
 
-    // --- NEW DIAGNOSTIC STEP ---
-    console.log(`[DIAGNOSTIC] Checking paper for hydration. UID: ${paperUid}, Title: "${existingPaper.title}". isStub param: ${isStub}. existingPaper.is_stub: ${existingPaper.is_stub}`);
-    // --- END DIAGNOSTIC STEP ---
-
-    if (!isStub && existingPaper.is_stub) {
+    // A paper should be updated if:
+    // 1. It's a formal hydration call (`isStub` is false) for an existing stub.
+    // 2. We have received new, richer data for a paper that is still a stub.
+    const isHydrationCall = !isStub && existingPaper.is_stub;
+    const canOpportunisticallyEnrich = existingPaper.is_stub && (!!paperData.title && paperData.title !== 'Untitled');
+    
+    if (isHydrationCall || canOpportunisticallyEnrich) {
       const changes: Partial<Paper> = {
-        is_stub: false,
+        // Only set is_stub to false on a formal hydration call.
+        is_stub: !isHydrationCall,
         title: paperData.title || paperData.display_name || existingPaper.title,
         publication_year: paperData.publication_year || existingPaper.publication_year,
         publication_date: paperData.publication_date || existingPaper.publication_date,
@@ -140,7 +143,6 @@ export async function processOpenAlexPaper(
   return paperUid;
 }
 
-// FIX: Restore the 'export' keyword
 export async function processSemanticScholarPaper(
   paperData: any,
   utils: UtilityFunctions
@@ -194,7 +196,6 @@ export async function processSemanticScholarPaper(
   return paperUid;
 }
 
-// FIX: Restore the 'export' keyword
 export async function processOpenAlexAuthor(
   authorData: any, 
   isStub = false,
@@ -229,7 +230,6 @@ export async function processOpenAlexAuthor(
   return authorUid;
 }
 
-// FIX: Restore the 'export' keyword
 export async function processOpenAlexInstitution(
   instData: any,
   institutions: Record<string, Institution>,
