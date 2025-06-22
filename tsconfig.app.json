@@ -1,5 +1,7 @@
 {
+  "extends": "./tsconfig.json",
   "compilerOptions": {
+    "composite": true,
     "target": "ES2020",
     "useDefineForClassFields": true,
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
@@ -9,22 +11,19 @@
     /* Bundler mode */
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
     "isolatedModules": true,
-    "moduleDetection": "force",
     "noEmit": true,
     "jsx": "react-jsx",
-
+    
     /* Linting */
-    "strict": false,
+    "strict": false, // NOTE: Replicating your project's settings
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-    "noImplicitAny": false,
-    "noFallthroughCasesInSwitch": false,
-
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"]
-    }
+    "noFallthroughCasesInSwitch": true,
+    
+    // FIX: This is the correct place for app-specific and test types
+    "types": ["vite/client", "vitest/globals"]
   },
   "include": ["src"]
 }
