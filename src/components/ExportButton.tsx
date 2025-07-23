@@ -20,9 +20,9 @@ export const ExportButton: React.FC = () => {
   } = useKnowledgeGraphStore();
 
   const handleExport = async () => {
-    // --- START: DIAGNOSTIC STEP ---
-    console.log("Inspecting external_id_index:", external_id_index);
-    // --- END: DIAGNOSTIC STEP ---
+    // --- START: NEW, SIMPLER DIAGNOSTIC STEP ---
+    console.log("Export button clicked, handleExport function started.");
+    // --- END: NEW, SIMPLER DIAGNOSTIC STEP ---
 
     if (Object.keys(papers).length === 0) {
       toast({
