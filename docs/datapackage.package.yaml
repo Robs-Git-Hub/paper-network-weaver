@@ -57,7 +57,6 @@ resources:
           description: The direct URL to the best-known Open Access PDF.
         - name: is_stub
           type: boolean
-          format: uri
           description: TRUE if the paper record is a stub.
       primaryKey: short_uid
       missingValues: [""]
@@ -268,8 +267,7 @@ resources:
     path: paper_relationships.csv
     title: Paper Relationships
     description: >
-      Defines the relationships between papers, such as citations (directed) and
-      similarity (undirected) links.
+      Defines the relationships between papers. Currently, only citation links are exported.
     format: csv
     profile: tabular-data-resource
     schema:
@@ -283,10 +281,8 @@ resources:
         - name: relationship_type
           type: string
           description: >
-            The type of relationship. 'cites' means the source paper cites the target paper.
-            'similar' means the papers are related by content.
-          constraints:
-            enum: ["cites", "similar"]
+            The type of relationship. Currently, only 'cites' is exported, meaning the
+            source paper cites the target paper.
       primaryKey: [source_short_uid, target_short_uid, relationship_type]
       foreignKeys:
         - fields: source_short_uid
@@ -302,7 +298,7 @@ resources:
     path: paper_relationship_types.csv
     title: Paper Relationship Types
     description: >
-      Indicates the types of relationships a given paper is involved in, such as citations or similarity.
+      A join table indicating the types of relationships a given paper has to the master paper.
     format: csv
     profile: tabular-data-resource
     schema:
@@ -312,6 +308,6 @@ resources:
           description: Foreign key to the papers table.
         - name: relationship_type
           type: string
-          description: The type of relationship (e.g., 'cites', 'similar').
+          description: The type of relationship (e.g., 'master', 'first_degree', 'co_citation').
       primaryKey: [paper_short_uid, relationship_type]
       missingValues: [""]
