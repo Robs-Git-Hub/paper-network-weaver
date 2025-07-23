@@ -1,13 +1,12 @@
 
 import React, { useMemo } from 'react';
-import { useKnowledgeGraphStore, Paper, Author } from '@/store/knowledge-graph-store';
+import { useKnowledgeGraphStore } from '@/store/knowledge-graph-store';
 import { MasterPaperCard } from '@/components/MasterPaperCard';
 import { UnifiedCitationsTable } from '@/components/UnifiedCitationsTable';
 import { NetworkView } from '@/components/NetworkView';
 import { TopNav } from '@/components/TopNav';
 import { ExportButton } from '@/components/ExportButton';
 import { ProgressDisplay } from '@/components/ProgressDisplay';
-// FIX: Import the EnrichedPaper type from its new central location.
 import { EnrichedPaper } from '@/types';
 
 interface MainAnalysisViewProps {
@@ -15,54 +14,33 @@ interface MainAnalysisViewProps {
   currentView?: string;
 }
 
-// NOTE: The EnrichedPaper interface has been moved to src/types/index.ts
-
 export const MainAnalysisView: React.FC<MainAnalysisViewProps> = ({ 
   onViewChange, 
   currentView = 'Table' 
 }) => {
-  const { papers, authors, authorships, relation_to_master, app_status } = useKnowledgeGraphStore();
+  // We now also get the pre-computed enriched_papers map from the store.
+  const { papers, enriched_papers, relation_to_master, app_status } = useKnowledgeGraphStore();
   
   const masterPaper = Object.values(papers).find(paper => !paper.is_stub && paper.publication_year);
   
   const isInitialLoading = ['loading', 'enriching'].includes(app_status.state);
   const isExtending = app_status.state === 'extending';
 
+  // This calculation is now dramatically faster.
+  // Instead of rebuilding everything on each render, we just do a quick lookup
+  // in the pre-computed `enriched_papers` map.
   const enrichedRelatedPapers = useMemo<EnrichedPaper[]>(() => {
     if (!masterPaper) return [];
 
-    const relatedPaperUids = Object.keys(relation_to_master);
+    // Get all paper UIDs that have a relationship tag.
+    const allRelatedPaperUids = Object.keys(relation_to_master);
 
-    // --- DIAGNOSTIC LOG 1 ---
-    console.log('[Diagnosis] Number of related paper UIDs found in state:', relatedPaperUids.length);
+    // This is now a simple and fast lookup, not a slow computation.
+    return allRelatedPaperUids
+      .map(uid => enriched_papers[uid])
+      .filter((paper): paper is EnrichedPaper => !!paper);
 
-    const enrichedPapers = relatedPaperUids
-      .map(uid => papers[uid])
-      .filter((paper): paper is Paper => !!paper)
-      .map(paper => {
-        const paperAuthorships = Object.values(authorships).filter(
-          auth => auth.paper_short_uid === paper.short_uid
-        );
-        const paperAuthors = paperAuthorships
-          .sort((a, b) => a.author_position - b.author_position)
-          .map(auth => authors[auth.author_short_uid])
-          .filter((author): author is Author => !!author);
-
-        const tags = relation_to_master[paper.short_uid] || [];
-
-        return {
-          ...paper,
-          authors: paperAuthors,
-          relationship_tags: tags,
-        };
-      });
-
-    // --- DIAGNOSTIC LOG 2 ---
-    console.log('[Diagnosis] Total number of enriched papers being sent to the UI for rendering:', enrichedPapers.length);
-      
-    return enrichedPapers;
-
-  }, [papers, authors, authorships, relation_to_master, masterPaper]);
+  }, [enriched_papers, relation_to_master, masterPaper]);
 
   if (isInitialLoading) {
     return (
