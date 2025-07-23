@@ -5,7 +5,7 @@ import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { EnrichedPaper } from '@/types';
 
-// Define the interfaces for the knowledge graph data
+// Interfaces remain the same...
 export interface Paper {
   short_uid: string;
   title: string;
@@ -73,10 +73,11 @@ interface KnowledgeGraphStore {
   relation_to_master: Record<string, string[]>;
   external_id_index: Record<string, string>;
   app_status: AppStatus;
+  enriched_papers: Record<string, EnrichedPaper>;
 
   // --- START: NEW PERFORMANCE FIX ---
-  // A pre-computed map of enriched papers for fast lookups in the UI.
-  enriched_papers: Record<string, EnrichedPaper>;
+  // A new index for O(1) lookup of authorships by paper UID.
+  authorshipsByPaperUid: Record<string, Authorship[]>;
   // --- END: NEW PERFORMANCE FIX ---
 
   setAppStatus: (status: Partial<AppStatus>) => void;
@@ -87,9 +88,9 @@ interface KnowledgeGraphStore {
 
 // Helper function to build an enriched paper object
 const createEnrichedPaper = (paper: Paper, state: KnowledgeGraphStore): EnrichedPaper => {
-  const paperAuthorships = Object.values(state.authorships).filter(
-    auth => auth.paper_short_uid === paper.short_uid
-  );
+  // FIX: This lookup is now instantaneous using the index.
+  const paperAuthorships = state.authorshipsByPaperUid[paper.short_uid] || [];
+  
   const paperAuthors = paperAuthorships
     .sort((a, b) => a.author_position - b.author_position)
     .map(auth => state.authors[auth.author_short_uid])
@@ -113,9 +114,10 @@ export const useKnowledgeGraphStore = create<KnowledgeGraphStore>()(devtools((se
   relation_to_master: {},
   external_id_index: {},
   app_status: { state: 'idle', message: null, progress: 0 },
-
-  // Initialize the new enriched paper cache
   enriched_papers: {},
+
+  // Initialize the new index
+  authorshipsByPaperUid: {},
 
   setAppStatus: (status) => set((state) => ({
     app_status: { ...state.app_status, ...status }
@@ -129,14 +131,14 @@ export const useKnowledgeGraphStore = create<KnowledgeGraphStore>()(devtools((se
     paper_relationships: [],
     relation_to_master: {},
     external_id_index: {},
-    enriched_papers: {}, // Also reset the enriched cache
+    enriched_papers: {},
+    authorshipsByPaperUid: {}, // Also reset the index
   }),
 
   updatePaper: (id, changes) => set((state) => {
     const updatedPaper = { ...state.papers[id], ...changes };
     return {
       papers: { ...state.papers, [id]: updatedPaper },
-      // Also update the enriched version
       enriched_papers: {
         ...state.enriched_papers,
         [id]: createEnrichedPaper(updatedPaper, state),
@@ -145,7 +147,6 @@ export const useKnowledgeGraphStore = create<KnowledgeGraphStore>()(devtools((se
   }),
 
   applyMessageBatch: (batch) => set((state) => {
-    // Create mutable drafts of the state slices we will be updating.
     const nextState = {
       ...state,
       papers: { ...state.papers },
@@ -156,14 +157,16 @@ export const useKnowledgeGraphStore = create<KnowledgeGraphStore>()(devtools((se
       relation_to_master: { ...state.relation_to_master },
       external_id_index: { ...state.external_id_index },
       enriched_papers: { ...state.enriched_papers },
+      // Make a mutable copy of the index for this batch
+      authorshipsByPaperUid: { ...state.authorshipsByPaperUid },
     };
 
-    // Process each message in the batch and apply it to our draft state.
     for (const message of batch) {
       const { type, payload } = message;
 
       switch (type) {
         case 'graph/reset':
+          // Full reset logic...
           nextState.papers = {};
           nextState.authors = {};
           nextState.institutions = {};
@@ -172,11 +175,11 @@ export const useKnowledgeGraphStore = create<KnowledgeGraphStore>()(devtools((se
           nextState.relation_to_master = {};
           nextState.external_id_index = {};
           nextState.enriched_papers = {};
+          nextState.authorshipsByPaperUid = {};
           break;
         case 'graph/addPaper':
           const newPaper = payload.paper as Paper;
           nextState.papers[newPaper.short_uid] = newPaper;
-          // Create the enriched version immediately
           nextState.enriched_papers[newPaper.short_uid] = createEnrichedPaper(newPaper, nextState);
           break;
         case 'graph/addAuthor':
@@ -189,27 +192,35 @@ export const useKnowledgeGraphStore = create<KnowledgeGraphStore>()(devtools((se
           const newAuthorship = payload.authorship as Authorship;
           const key = `${newAuthorship.paper_short_uid}_${newAuthorship.author_short_uid}`;
           nextState.authorships[key] = newAuthorship;
-          // When authorship changes, we must re-enrich the related paper
-          const relatedPaper = nextState.papers[newAuthorship.paper_short_uid];
+
+          // --- FIX: Update the new index ---
+          const paperUid = newAuthorship.paper_short_uid;
+          if (!nextState.authorshipsByPaperUid[paperUid]) {
+            nextState.authorshipsByPaperUid[paperUid] = [];
+          }
+          nextState.authorshipsByPaperUid[paperUid].push(newAuthorship);
+          // --- END FIX ---
+
+          const relatedPaper = nextState.papers[paperUid];
           if (relatedPaper) {
-            nextState.enriched_papers[relatedPaper.short_uid] = createEnrichedPaper(relatedPaper, nextState);
+            nextState.enriched_papers[paperUid] = createEnrichedPaper(relatedPaper, nextState);
           }
           break;
+        // ... other cases remain the same
         case 'graph/addRelationship':
           nextState.paper_relationships.push(payload.relationship);
           break;
         case 'graph/addRelationshipTag':
-          const { paperUid, tag } = payload;
-          if (!nextState.relation_to_master[paperUid]) {
-            nextState.relation_to_master[paperUid] = [];
+          const { paperUid: tagPaperUid, tag } = payload;
+          if (!nextState.relation_to_master[tagPaperUid]) {
+            nextState.relation_to_master[tagPaperUid] = [];
           }
-          if (!nextState.relation_to_master[paperUid].includes(tag)) {
-            nextState.relation_to_master[paperUid].push(tag);
+          if (!nextState.relation_to_master[tagPaperUid].includes(tag)) {
+            nextState.relation_to_master[tagPaperUid].push(tag);
           }
-          // When tags change, we must re-enrich the related paper
-          const paperToUpdate = nextState.papers[paperUid];
+          const paperToUpdate = nextState.papers[tagPaperUid];
           if (paperToUpdate) {
-            nextState.enriched_papers[paperUid] = createEnrichedPaper(paperToUpdate, nextState);
+            nextState.enriched_papers[tagPaperUid] = createEnrichedPaper(paperToUpdate, nextState);
           }
           break;
         case 'graph/setExternalId':
@@ -220,7 +231,6 @@ export const useKnowledgeGraphStore = create<KnowledgeGraphStore>()(devtools((se
           if (paperToUpdateChanges) {
             const updatedPaper = { ...paperToUpdateChanges, ...payload.changes };
             nextState.papers[payload.id] = updatedPaper;
-            // Also update the enriched version
             nextState.enriched_papers[payload.id] = createEnrichedPaper(updatedPaper, nextState);
           }
           break;
