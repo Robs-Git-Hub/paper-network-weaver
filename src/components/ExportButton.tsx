@@ -15,7 +15,8 @@ export const ExportButton: React.FC = () => {
     institutions,
     authorships,
     paper_relationships,
-    external_id_index
+    external_id_index,
+    relation_to_master, // <-- ADD THIS
   } = useKnowledgeGraphStore();
 
   const handleExport = async () => {
@@ -36,7 +37,8 @@ export const ExportButton: React.FC = () => {
         institutions,
         authorships,
         paper_relationships,
-        external_id_index
+        external_id_index,
+        relation_to_master // <-- PASS THIS
       });
       
       toast({

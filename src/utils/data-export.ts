@@ -10,6 +10,7 @@ interface ExportableData {
   authorships: Record<string, Authorship>;
   paper_relationships: PaperRelationship[];
   external_id_index: Record<string, string>;
+  relation_to_master: Record<string, string[]>; // <-- ADD THIS
 }
 
 // Convert object to CSV string
@@ -108,7 +109,7 @@ function generateAuthorshipInstitutionsCSV(authorships: Record<string, Authorshi
   
   const data: any[] = [];
   Object.values(authorships).forEach(authorship => {
-    authorship.institution_uids.forEach(institutionUid => {
+    (authorship.institution_uids || []).forEach(institutionUid => {
       data.push({
         paper_short_uid: authorship.paper_short_uid,
         author_short_uid: authorship.author_short_uid,
@@ -133,15 +134,16 @@ function generatePaperRelationshipsCSV(relationships: PaperRelationship[]): stri
   return objectsToCSV(relationshipData, headers);
 }
 
+// --- START: FIX for relationship tags export ---
 // Generate paper_relationship_types.csv
-function generatePaperRelationshipTypesCSV(papers: Record<string, Paper>): string {
+function generatePaperRelationshipTypesCSV(relation_to_master: Record<string, string[]>): string {
   const headers = ['paper_short_uid', 'relationship_type'];
   
-  const data: any[] = [];
-  Object.values(papers).forEach(paper => {
-    paper.relationship_tags.forEach(tag => {
+  const data: { paper_short_uid: string, relationship_type: string }[] = [];
+  Object.entries(relation_to_master).forEach(([paper_short_uid, tags]) => {
+    (tags || []).forEach(tag => {
       data.push({
-        paper_short_uid: paper.short_uid,
+        paper_short_uid: paper_short_uid,
         relationship_type: tag
       });
     });
@@ -149,14 +151,18 @@ function generatePaperRelationshipTypesCSV(papers: Record<string, Paper>): strin
   
   return objectsToCSV(data, headers);
 }
+// --- END: FIX for relationship tags export ---
 
+
+// --- START: FIX for keyword export robustness ---
 // Generate paper_keywords.csv
 function generatePaperKeywordsCSV(papers: Record<string, Paper>): string {
   const headers = ['paper_short_uid', 'keyword'];
   
   const data: any[] = [];
   Object.values(papers).forEach(paper => {
-    paper.keywords.forEach(keyword => {
+    // Add safety check for paper.keywords
+    (paper.keywords || []).forEach(keyword => {
       data.push({
         paper_short_uid: paper.short_uid,
         keyword: keyword
@@ -166,6 +172,7 @@ function generatePaperKeywordsCSV(papers: Record<string, Paper>): string {
   
   return objectsToCSV(data, headers);
 }
+// --- END: FIX for keyword export robustness ---
 
 // Generate external ID CSVs (placeholder for now since external IDs aren't directly accessible)
 function generateExternalIdCSV(type: 'paper' | 'author' | 'institution'): string {
@@ -186,7 +193,8 @@ export async function exportDataPackage(data: ExportableData): Promise<void> {
     'authorships.csv': generateAuthorshipsCSV(data.authorships),
     'authorship_institutions.csv': generateAuthorshipInstitutionsCSV(data.authorships),
     'paper_relationships.csv': generatePaperRelationshipsCSV(data.paper_relationships),
-    'paper_relationship_types.csv': generatePaperRelationshipTypesCSV(data.papers),
+    // Use the correct data source for relationship types
+    'paper_relationship_types.csv': generatePaperRelationshipTypesCSV(data.relation_to_master),
     'paper_keywords.csv': generatePaperKeywordsCSV(data.papers),
     'paper_to_externalid.csv': generateExternalIdCSV('paper'),
     'author_to_externalid.csv': generateExternalIdCSV('author'),
