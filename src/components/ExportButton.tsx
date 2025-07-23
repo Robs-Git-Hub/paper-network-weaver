@@ -16,10 +16,14 @@ export const ExportButton: React.FC = () => {
     authorships,
     paper_relationships,
     external_id_index,
-    relation_to_master, // <-- ADD THIS
+    relation_to_master,
   } = useKnowledgeGraphStore();
 
   const handleExport = async () => {
+    // --- START: DIAGNOSTIC STEP ---
+    console.log("Inspecting external_id_index:", external_id_index);
+    // --- END: DIAGNOSTIC STEP ---
+
     if (Object.keys(papers).length === 0) {
       toast({
         title: "No data to export",
@@ -38,7 +42,7 @@ export const ExportButton: React.FC = () => {
         authorships,
         paper_relationships,
         external_id_index,
-        relation_to_master // <-- PASS THIS
+        relation_to_master
       });
       
       toast({
