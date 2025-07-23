@@ -20,11 +20,6 @@ export const ExportButton: React.FC = () => {
   } = useKnowledgeGraphStore();
 
   const handleExport = async () => {
-    // --- START: FINAL DIAGNOSTIC STEP ---
-    // Now that verbose logging is enabled, we can inspect the object.
-    console.log("Inspecting external_id_index:", external_id_index);
-    // --- END: FINAL DIAGNOSTIC STEP ---
-
     if (Object.keys(papers).length === 0) {
       toast({
         title: "No data to export",

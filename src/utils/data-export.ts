@@ -10,7 +10,7 @@ interface ExportableData {
   authorships: Record<string, Authorship>;
   paper_relationships: PaperRelationship[];
   external_id_index: Record<string, string>;
-  relation_to_master: Record<string, string[]>; // <-- ADD THIS
+  relation_to_master: Record<string, string[]>;
 }
 
 // Convert object to CSV string
@@ -134,7 +134,6 @@ function generatePaperRelationshipsCSV(relationships: PaperRelationship[]): stri
   return objectsToCSV(relationshipData, headers);
 }
 
-// --- START: FIX for relationship tags export ---
 // Generate paper_relationship_types.csv
 function generatePaperRelationshipTypesCSV(relation_to_master: Record<string, string[]>): string {
   const headers = ['paper_short_uid', 'relationship_type'];
@@ -151,17 +150,13 @@ function generatePaperRelationshipTypesCSV(relation_to_master: Record<string, st
   
   return objectsToCSV(data, headers);
 }
-// --- END: FIX for relationship tags export ---
 
-
-// --- START: FIX for keyword export robustness ---
 // Generate paper_keywords.csv
 function generatePaperKeywordsCSV(papers: Record<string, Paper>): string {
   const headers = ['paper_short_uid', 'keyword'];
   
   const data: any[] = [];
   Object.values(papers).forEach(paper => {
-    // Add safety check for paper.keywords
     (paper.keywords || []).forEach(keyword => {
       data.push({
         paper_short_uid: paper.short_uid,
@@ -172,14 +167,62 @@ function generatePaperKeywordsCSV(papers: Record<string, Paper>): string {
   
   return objectsToCSV(data, headers);
 }
-// --- END: FIX for keyword export robustness ---
 
-// Generate external ID CSVs (placeholder for now since external IDs aren't directly accessible)
-function generateExternalIdCSV(type: 'paper' | 'author' | 'institution'): string {
-  const headers = [`${type}_short_uid`, 'external_id_type', 'external_id'];
-  // Return empty CSV with headers since external ID data isn't currently accessible
-  return headers.join(',') + '\n';
+// --- START: IMPLEMENTATION for External ID Export ---
+
+// A map to define which external ID sources belong to which entity type.
+const ID_PREFIX_TO_ENTITY_TYPE_MAP: Record<string, 'paper' | 'author' | 'institution'> = {
+  'openalex': 'paper',
+  'doi': 'paper',
+  'pmid': 'paper',
+  'mag': 'paper',
+  'openalex_author': 'author',
+  'orcid': 'author',
+  'ror': 'institution',
+};
+
+// A helper to safely parse the external ID key.
+// e.g., "doi:10.123/abc" -> { type: 'doi', value: '10.123/abc' }
+function parseExternalIdKey(key: string): { type: string; value: string } | null {
+  const parts = key.split(':');
+  if (parts.length < 2) return null;
+  
+  // The type is the first part; the value is the rest joined back together.
+  // This correctly handles IDs that contain colons, like DOIs.
+  const type = parts[0];
+  const value = parts.slice(1).join(':');
+  
+  return { type, value };
 }
+
+// This function replaces the placeholder and contains the real export logic.
+function generateExternalIdCSV(
+  entityType: 'paper' | 'author' | 'institution', 
+  external_id_index: Record<string, string>
+): string {
+  const headers = [`${entityType}_short_uid`, 'external_id_type', 'external_id'];
+  const data: any[] = [];
+
+  Object.entries(external_id_index).forEach(([key, short_uid]) => {
+    const parsedKey = parseExternalIdKey(key);
+    if (!parsedKey) return; // Skip any malformed keys
+
+    const mappedEntityType = ID_PREFIX_TO_ENTITY_TYPE_MAP[parsedKey.type];
+    
+    // Only include rows that match the entity type for the specific CSV we are generating.
+    if (mappedEntityType === entityType) {
+      data.push({
+        [`${entityType}_short_uid`]: short_uid,
+        'external_id_type': parsedKey.type,
+        'external_id': parsedKey.value,
+      });
+    }
+  });
+
+  return objectsToCSV(data, headers);
+}
+// --- END: IMPLEMENTATION for External ID Export ---
+
 
 // Main export function
 export async function exportDataPackage(data: ExportableData): Promise<void> {
@@ -193,12 +236,12 @@ export async function exportDataPackage(data: ExportableData): Promise<void> {
     'authorships.csv': generateAuthorshipsCSV(data.authorships),
     'authorship_institutions.csv': generateAuthorshipInstitutionsCSV(data.authorships),
     'paper_relationships.csv': generatePaperRelationshipsCSV(data.paper_relationships),
-    // Use the correct data source for relationship types
     'paper_relationship_types.csv': generatePaperRelationshipTypesCSV(data.relation_to_master),
     'paper_keywords.csv': generatePaperKeywordsCSV(data.papers),
-    'paper_to_externalid.csv': generateExternalIdCSV('paper'),
-    'author_to_externalid.csv': generateExternalIdCSV('author'),
-    'institution_to_externalid.csv': generateExternalIdCSV('institution')
+    // Pass the external_id_index to the new, intelligent generator function.
+    'paper_to_externalid.csv': generateExternalIdCSV('paper', data.external_id_index),
+    'author_to_externalid.csv': generateExternalIdCSV('author', data.external_id_index),
+    'institution_to_externalid.csv': generateExternalIdCSV('institution', data.external_id_index)
   };
   
   // Add CSV files to zip
