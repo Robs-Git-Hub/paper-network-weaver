@@ -19,7 +19,6 @@ import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from 
 import { FileText, ExternalLink, ChevronUp, ChevronDown } from 'lucide-react';
 import { Paper } from '@/store/knowledge-graph-store';
 import { useIsMobile } from '@/hooks/use-mobile';
-// FIX: Import the EnrichedPaper type from its new central location.
 import { EnrichedPaper } from '@/types';
 
 interface CitationsTableProps {
@@ -67,11 +66,15 @@ const AbstractModal: React.FC<AbstractModalProps> = ({ paper, children }) => {
   );
 };
 
+const MOBILE_PAGE_SIZE = 20;
+
 export const CitationsTable: React.FC<CitationsTableProps> = ({ papers }) => {
   const isMobile = useIsMobile();
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'citations', desc: true },
   ]);
+  // FIX: Add state to manage how many items are visible in the mobile view.
+  const [visibleMobileCount, setVisibleMobileCount] = useState(MOBILE_PAGE_SIZE);
 
   const getRelationshipTagLabel = (tag: string) => {
     switch (tag) {
@@ -206,10 +209,13 @@ export const CitationsTable: React.FC<CitationsTableProps> = ({ papers }) => {
   const totalSize = rowVirtualizer.getTotalSize();
 
   if (isMobile) {
+    // FIX: Only take a 'slice' of the papers to render initially.
+    const visiblePapers = papers.slice(0, visibleMobileCount);
+
     return (
       <div className="space-y-4">
-        <div className="text-sm text-muted-foreground">({papers.length})</div>
-        {papers.map((paper) => {
+        <div className="text-sm text-muted-foreground">Showing {visiblePapers.length} of {papers.length} papers</div>
+        {visiblePapers.map((paper) => {
           const paperAuthors = paper.authors;
           return (
             <Card key={paper.short_uid}>
@@ -246,6 +252,16 @@ export const CitationsTable: React.FC<CitationsTableProps> = ({ papers }) => {
             </Card>
           );
         })}
+        {/* FIX: Add a 'Load More' button if there are more papers to show. */}
+        {visibleMobileCount < papers.length && (
+          <Button 
+            variant="outline" 
+            className="w-full"
+            onClick={() => setVisibleMobileCount(current => current + MOBILE_PAGE_SIZE)}
+          >
+            Load More
+          </Button>
+        )}
       </div>
     );
   }
