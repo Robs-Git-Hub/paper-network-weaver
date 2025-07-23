@@ -1,0 +1,1084 @@
+This file is a merged representation of a subset of the codebase, containing specifically included files, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of a subset of the repository's contents that is considered the most important context.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Only files matching these patterns are included: src/workers/graph-core/worker-handler.ts, src/workers/graph-core/entity-processors.ts, src/workers/graph-core/relationship-builder.ts, src/store/knowledge-graph-store.ts, src/components/MainAnalysisView.tsx
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+src/components/MainAnalysisView.tsx
+src/store/knowledge-graph-store.ts
+src/workers/graph-core/entity-processors.ts
+src/workers/graph-core/relationship-builder.ts
+src/workers/graph-core/worker-handler.ts
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="src/workers/graph-core/entity-processors.ts">
+import { reconstructAbstract, extractKeywords, normalizeDoi, generateShortUid } from '../../utils/data-transformers';
+import { normalizeOpenAlexId } from '../../services/openAlex-util';
+import { addToExternalIndex, findByExternalId } from './utils';
+import type { Paper, Author, Institution, Authorship, UtilityFunctions, OpenAlexPaper } from './types';
+
+// Entity processing functions
+
+export async function processOpenAlexPaper(
+  paperData: OpenAlexPaper, 
+  isStub = false,
+  papers: Record<string, Paper>,
+  authors: Record<string, Author>,
+  institutions: Record<string, Institution>,
+  authorships: Record<string, Authorship>,
+  utils: UtilityFunctions
+): Promise<string> {
+  let paperUid: string | null = null;
+
+  // Step 1: Find by external ID
+  if (paperData.doi) {
+    const normalizedDoi = normalizeDoi(paperData.doi);
+    if (normalizedDoi) {
+      paperUid = findByExternalId('doi', normalizedDoi);
+    }
+  }
+  if (!paperUid && paperData.id) {
+    paperUid = findByExternalId('openalex', normalizeOpenAlexId(paperData.id));
+  }
+
+  // Step 2: Get the existing paper object
+  const existingPaper = paperUid ? papers[paperUid] : null;
+
+  if (!existingPaper) {
+    // CREATE NEW: This branch runs if the paper is completely new.
+    paperUid = paperUid || generateShortUid();
+    const newPaper: Paper = {
+      short_uid: paperUid,
+      title: paperData.title || paperData.display_name || 'Untitled',
+      publication_year: paperData.publication_year || null,
+      publication_date: paperData.publication_date || null,
+      location: paperData.primary_location?.source?.display_name || null,
+      abstract: reconstructAbstract(paperData.abstract_inverted_index),
+      fwci: paperData.fwci || null,
+      cited_by_count: paperData.cited_by_count || 0,
+      type: paperData.type || 'article',
+      language: paperData.language || null,
+      keywords: extractKeywords(paperData.keywords),
+      best_oa_url: paperData.open_access?.oa_url || null,
+      oa_status: paperData.open_access?.oa_status || null,
+      is_stub: isStub,
+    };
+    papers[paperUid] = newPaper;
+    utils.postMessage('graph/addPaper', { paper: newPaper });
+  } else {
+    // UPDATE EXISTING: This branch runs if the paper already exists.
+    paperUid = existingPaper.short_uid;
+
+    // A paper should be updated if:
+    // 1. It's a formal hydration call (`isStub` is false) for an existing stub.
+    // 2. We have received new, richer data for a paper that is still a stub.
+    const isHydrationCall = !isStub && existingPaper.is_stub;
+    const canOpportunisticallyEnrich = existingPaper.is_stub && (!!paperData.title && paperData.title !== 'Untitled');
+    
+    if (isHydrationCall || canOpportunisticallyEnrich) {
+      const changes: Partial<Paper> = {
+        // Only set is_stub to false on a formal hydration call.
+        is_stub: !isHydrationCall,
+        title: paperData.title || paperData.display_name || existingPaper.title,
+        publication_year: paperData.publication_year || existingPaper.publication_year,
+        publication_date: paperData.publication_date || existingPaper.publication_date,
+        location: paperData.primary_location?.source?.display_name || existingPaper.location,
+        abstract: reconstructAbstract(paperData.abstract_inverted_index) || existingPaper.abstract,
+        fwci: paperData.fwci || existingPaper.fwci,
+        cited_by_count: paperData.cited_by_count || existingPaper.cited_by_count,
+        type: paperData.type || existingPaper.type,
+        language: paperData.language || existingPaper.language,
+        keywords: extractKeywords(paperData.keywords).length > 0 ? extractKeywords(paperData.keywords) : existingPaper.keywords,
+        best_oa_url: paperData.open_access?.oa_url || existingPaper.best_oa_url,
+        oa_status: paperData.open_access?.oa_status || existingPaper.oa_status,
+      };
+      papers[paperUid] = { ...existingPaper, ...changes };
+      utils.postMessage('papers/updateOne', { id: paperUid, changes });
+    }
+  }
+  
+  if (!paperUid) {
+    throw new Error("Critical error: paperUid is null after processing.");
+  }
+
+  // Add entries to the external ID index
+  if (paperData.id) {
+    const cleanId = normalizeOpenAlexId(paperData.id);
+    const key = `openalex:${cleanId}`;
+    if (!findByExternalId('openalex', cleanId)) {
+        addToExternalIndex('openalex', cleanId, paperUid);
+        utils.postMessage('graph/setExternalId', { key, uid: paperUid });
+    }
+  }
+  if (paperData.doi) {
+    const normalizedDoi = normalizeDoi(paperData.doi);
+    if (normalizedDoi) {
+      const key = `doi:${normalizedDoi}`;
+      if(!findByExternalId('doi', normalizedDoi)) {
+          addToExternalIndex('doi', normalizedDoi, paperUid);
+          utils.postMessage('graph/setExternalId', { key, uid: paperUid });
+      }
+    }
+  }
+
+  // Process authorships for full (non-stub) papers
+  if (!isStub && paperData.authorships) {
+    for (let i = 0; i < paperData.authorships.length; i++) {
+      const authorship = paperData.authorships[i];
+      if (!authorship.author) continue;
+      
+      const authorUid = await processOpenAlexAuthor(authorship.author, isStub, authors, utils);
+      
+      const authorshipKey = `${paperUid}_${authorUid}`;
+      if (!authorships[authorshipKey]) {
+        const newAuthorship: Authorship = {
+          paper_short_uid: paperUid,
+          author_short_uid: authorUid,
+          author_position: i,
+          is_corresponding: authorship.is_corresponding || false,
+          raw_author_name: authorship.raw_author_name || null,
+          institution_uids: []
+        };
+        
+        if (authorship.institutions) {
+          for (const inst of authorship.institutions) {
+            const instUid = await processOpenAlexInstitution(inst, institutions, utils);
+            newAuthorship.institution_uids.push(instUid);
+          }
+        }
+        
+        authorships[authorshipKey] = newAuthorship;
+        utils.postMessage('graph/addAuthorship', { authorship: newAuthorship });
+      }
+    }
+  }
+
+  return paperUid;
+}
+
+export async function processSemanticScholarPaper(
+  paperData: any,
+  utils: UtilityFunctions
+): Promise<string> {
+  let paperUid: string | null = null;
+
+  const doi = paperData.externalIds?.DOI;
+  if (doi) {
+    paperUid = findByExternalId('doi', doi);
+  }
+  if (!paperUid && paperData.paperId) {
+    paperUid = findByExternalId('ss', paperData.paperId);
+  }
+
+  if (!paperUid) {
+    paperUid = generateShortUid();
+    const newPaper: Paper = {
+      short_uid: paperUid,
+      title: paperData.title || 'Untitled',
+      publication_year: paperData.year || null,
+      publication_date: paperData.year ? `${paperData.year}-01-01` : null,
+      location: paperData.venue || null,
+      abstract: paperData.abstract || null,
+      fwci: null,
+      cited_by_count: paperData.citationCount || 0,
+      type: 'article',
+      language: null,
+      keywords: [],
+      best_oa_url: paperData.openAccessPdf?.url || null,
+      oa_status: paperData.openAccessPdf?.url ? 'green' : 'closed',
+      is_stub: true,
+    };
+    utils.postMessage('graph/addPaper', { paper: newPaper });
+  }
+
+  if (doi) {
+    const key = `doi:${doi}`;
+    if (!findByExternalId('doi', doi)) {
+      utils.addToExternalIndex('doi', doi, paperUid);
+      utils.postMessage('graph/setExternalId', { key, uid: paperUid });
+    }
+  }
+  if (paperData.paperId) {
+    const key = `ss:${paperData.paperId}`;
+    if (!findByExternalId('ss', paperData.paperId)) {
+      utils.addToExternalIndex('ss', paperData.paperId, paperUid);
+      utils.postMessage('graph/setExternalId', { key, uid: paperUid });
+    }
+  }
+  
+  return paperUid;
+}
+
+export async function processOpenAlexAuthor(
+  authorData: any, 
+  isStub = false,
+  authors: Record<string, Author>,
+  utils: UtilityFunctions
+): Promise<string> {
+  if (authorData?.id) {
+    const cleanId = normalizeOpenAlexId(authorData.id);
+    const existingUid = findByExternalId('openalex_author', cleanId);
+    if (existingUid) return existingUid;
+  }
+
+  const authorUid = generateShortUid();
+  
+  const newAuthor: Author = {
+    short_uid: authorUid,
+    clean_name: authorData?.display_name || 'Unknown Author',
+    orcid: authorData?.orcid || null,
+    is_stub: isStub
+  };
+
+  authors[authorUid] = newAuthor;
+  utils.postMessage('graph/addAuthor', { author: newAuthor });
+
+  if (authorData?.id) {
+    const cleanId = normalizeOpenAlexId(authorData.id);
+    const key = `openalex_author:${cleanId}`;
+    addToExternalIndex('openalex_author', cleanId, authorUid);
+    utils.postMessage('graph/setExternalId', { key, uid: authorUid });
+  }
+
+  return authorUid;
+}
+
+export async function processOpenAlexInstitution(
+  instData: any,
+  institutions: Record<string, Institution>,
+  utils: UtilityFunctions
+): Promise<string> {
+  if (instData.id) {
+    const cleanId = normalizeOpenAlexId(instData.id);
+    const existingUid = findByExternalId('openalex_institution', cleanId);
+    if (existingUid) return existingUid;
+  }
+
+  const instUid = generateShortUid();
+  
+  const newInstitution: Institution = {
+    short_uid: instUid,
+    ror_id: instData.ror || null,
+    display_name: instData.display_name || 'Unknown Institution',
+    country_code: instData.country_code || null,
+    type: instData.type || null
+  };
+
+  institutions[instUid] = newInstitution;
+  utils.postMessage('graph/addInstitution', { institution: newInstitution });
+
+  if (instData.id) {
+    const cleanId = normalizeOpenAlexId(instData.id);
+    const key = `openalex_institution:${cleanId}`;
+    addToExternalIndex('openalex_institution', cleanId, instUid);
+    utils.postMessage('graph/setExternalId', { key, uid: instUid });
+  }
+
+  return instUid;
+}
+</file>
+
+<file path="src/store/knowledge-graph-store.ts">
+// src/strore/knowledge-graph-store.ts
+
+import { create } from 'zustand';
+import { devtools } from 'zustand/middleware';
+
+// Define the interfaces for the knowledge graph data
+export interface Paper {
+  short_uid: string;
+  title: string;
+  publication_year: number | null;
+  publication_date: string | null;
+  location: string | null;
+  abstract: string | null;
+  fwci: number | null;
+  cited_by_count: number;
+  type: string;
+  language: string | null;
+  keywords: string[];
+  best_oa_url: string | null;
+  oa_status: string | null;
+  is_stub: boolean;
+  // relationship_tags has been removed, as this is now handled by `relation_to_master`
+}
+
+export interface Author {
+  short_uid: string;
+  clean_name: string;
+  orcid: string | null;
+  is_stub: boolean;
+}
+
+export interface Institution {
+  short_uid: string;
+  ror_id: string | null;
+  display_name: string;
+  country_code: string | null;
+  type: string | null;
+}
+
+export interface Authorship {
+  paper_short_uid: string;
+  author_short_uid: string;
+  author_position: number;
+  is_corresponding: boolean;
+  raw_author_name: string | null;
+  institution_uids: string[];
+}
+
+export interface PaperRelationship {
+  source_short_uid: string;
+  target_short_uid: string;
+  // This type is now restricted, preventing incorrect relationships.
+  relationship_type: 'cites'; 
+}
+
+export interface ExternalIdType {
+  id_type: 'openalex' | 'doi' | 'ss' | 'corpusId';
+  id_value: string;
+}
+
+export interface AppStatus {
+  state: 'idle' | 'loading' | 'enriching' | 'extending' | 'active' | 'error';
+  message: string | null;
+  progress?: number;
+}
+
+// Used for batch processing messages from the worker
+interface WorkerMessage {
+  type: string;
+  payload: any;
+}
+
+interface KnowledgeGraphStore {
+  // === ENTITY SLICES ===
+  papers: Record<string, Paper>;
+  authors: Record<string, Author>;
+  institutions: Record<string, Institution>;
+
+  // === RELATIONSHIP SLICES ===
+  authorships: Record<string, Authorship>;
+  paper_relationships: PaperRelationship[];
+  // NEW: The UI context index, as per the new architecture.
+  relation_to_master: Record<string, string[]>;
+
+  // === DEDUPLICATION INDEX ===
+  external_id_index: Record<string, string>;
+
+  // === APP STATUS ===
+  app_status: AppStatus;
+
+  // === ACTIONS ===
+  setAppStatus: (status: Partial<AppStatus>) => void;
+  
+  // New actions to handle streaming data
+  resetGraph: () => void;
+  addPaper: (paper: Paper) => void;
+  addAuthor: (author: Author) => void;
+  addInstitution: (institution: Institution) => void;
+  addAuthorship: (authorship: Authorship) => void;
+  addRelationship: (relationship: PaperRelationship) => void;
+  setExternalId: (key: string, uid: string) => void;
+
+  updatePaper: (id: string, changes: Partial<Paper>) => void;
+  addNodes: (data: {
+    papers?: Record<string, Paper>;
+    authors?: Record<string, Author>;
+    institutions?: Record<string, Institution>;
+    authorships?: Record<string, Authorship>;
+    paper_relationships?: PaperRelationship[];
+  }) => void;
+  applyAuthorMerge: (updates: {
+    authors: Array<{ id: string; changes: Partial<Author> }>;
+    authorships: Array<{ id: string; changes: Partial<Authorship> }>;
+  }, deletions: {
+    authors: string[];
+  }) => void;
+
+  // --- START: NEW BATCH UPDATE ACTION ---
+  applyMessageBatch: (batch: WorkerMessage[]) => void;
+  // --- END: NEW BATCH UPDATE ACTION ---
+}
+
+export const useKnowledgeGraphStore = create<KnowledgeGraphStore>()(devtools((set) => ({
+  // Initial state
+  papers: {},
+  authors: {},
+  institutions: {},
+  authorships: {},
+  paper_relationships: [],
+  relation_to_master: {}, // NEW: Initialize new state
+  external_id_index: {},
+  app_status: {
+    state: 'idle',
+    message: null,
+    progress: 0,
+  },
+
+  // Actions
+  setAppStatus: (status) => set((state) => ({
+    app_status: { ...state.app_status, ...status }
+  })),
+
+  // --- START OF NEW STREAMING ACTIONS ---
+  
+  // Action to clear the entire graph state, called before a new analysis begins.
+  resetGraph: () => set({
+    papers: {},
+    authors: {},
+    institutions: {},
+    authorships: {},
+    paper_relationships: [],
+    relation_to_master: {}, // NEW: Reset new state
+    external_id_index: {},
+  }),
+
+  // Adds a single paper to the store.
+  addPaper: (paper) => set((state) => ({
+    papers: { ...state.papers, [paper.short_uid]: paper }
+  })),
+  
+  // Adds a single author to the store.
+  addAuthor: (author) => set((state) => ({
+    authors: { ...state.authors, [author.short_uid]: author }
+  })),
+
+  // Adds a single institution to the store.
+  addInstitution: (institution) => set((state) => ({
+    institutions: { ...state.institutions, [institution.short_uid]: institution }
+  })),
+
+  // Adds a single authorship to the store.
+  addAuthorship: (authorship) => {
+    const key = `${authorship.paper_short_uid}_${authorship.author_short_uid}`;
+    set((state) => ({
+      authorships: { ...state.authorships, [key]: authorship }
+    }));
+  },
+
+  // Adds a single paper relationship to the store.
+  addRelationship: (relationship) => set((state) => ({
+    paper_relationships: [...state.paper_relationships, relationship]
+  })),
+  
+  // Adds a single external ID mapping to the index.
+  setExternalId: (key, uid) => set((state) => ({
+    external_id_index: { ...state.external_id_index, [key]: uid }
+  })),
+
+  // --- END OF NEW STREAMING ACTIONS ---
+
+  updatePaper: (id, changes) => set((state) => ({
+    papers: {
+      ...state.papers,
+      [id]: { ...state.papers[id], ...changes }
+    }
+  })),
+
+  addNodes: (data) => set((state) => ({
+    papers: { ...state.papers, ...(data.papers || {}) },
+    authors: { ...state.authors, ...(data.authors || {}) },
+    institutions: { ...state.institutions, ...(data.institutions || {}) },
+    authorships: { ...state.authorships, ...(data.authorships || {}) },
+    paper_relationships: [...state.paper_relationships, ...(data.paper_relationships || [])]
+  })),
+
+  applyAuthorMerge: (updates, deletions) => set((state) => {
+    const newAuthors = { ...state.authors };
+    const newAuthorships = { ...state.authorships };
+
+    // Apply author updates
+    updates.authors.forEach(({ id, changes }) => {
+      if (newAuthors[id]) {
+        newAuthors[id] = { ...newAuthors[id], ...changes };
+      }
+    });
+
+    // Apply authorship updates
+    updates.authorships.forEach(({ id, changes }) => {
+      if (newAuthorships[id]) {
+        newAuthorships[id] = { ...newAuthorships[id], ...changes };
+      }
+    });
+
+    // Delete authors
+    deletions.authors.forEach(id => {
+      delete newAuthors[id];
+    });
+
+    return {
+      authors: newAuthors,
+      authorships: newAuthorships
+    };
+  }),
+  
+  // --- START: NEW BATCH UPDATE ACTION IMPLEMENTATION ---
+  applyMessageBatch: (batch) => set((state) => {
+    // Create mutable drafts of the state slices we will be updating.
+    const nextState = {
+      papers: { ...state.papers },
+      authors: { ...state.authors },
+      institutions: { ...state.institutions },
+      authorships: { ...state.authorships },
+      paper_relationships: [...state.paper_relationships],
+      relation_to_master: { ...state.relation_to_master },
+      external_id_index: { ...state.external_id_index },
+    };
+
+    // Process each message in the batch and apply it to our draft state.
+    for (const message of batch) {
+      const { type, payload } = message;
+
+      switch (type) {
+        case 'graph/reset':
+          nextState.papers = {};
+          nextState.authors = {};
+          nextState.institutions = {};
+          nextState.authorships = {};
+          nextState.paper_relationships = [];
+          nextState.relation_to_master = {};
+          nextState.external_id_index = {};
+          break;
+        case 'graph/addPaper':
+          nextState.papers[payload.paper.short_uid] = payload.paper;
+          break;
+        case 'graph/addAuthor':
+          nextState.authors[payload.author.short_uid] = payload.author;
+          break;
+        case 'graph/addInstitution':
+          nextState.institutions[payload.institution.short_uid] = payload.institution;
+          break;
+        case 'graph/addAuthorship':
+          const key = `${payload.authorship.paper_short_uid}_${payload.authorship.author_short_uid}`;
+          nextState.authorships[key] = payload.authorship;
+          break;
+        case 'graph/addRelationship':
+          nextState.paper_relationships.push(payload.relationship);
+          break;
+        // FIX: Add the missing case to handle the new message type from the worker.
+        case 'graph/addRelationshipTag':
+          const { paperUid, tag } = payload;
+          if (!nextState.relation_to_master[paperUid]) {
+            nextState.relation_to_master[paperUid] = [];
+          }
+          if (!nextState.relation_to_master[paperUid].includes(tag)) {
+            nextState.relation_to_master[paperUid].push(tag);
+          }
+          break;
+        case 'graph/setExternalId':
+          nextState.external_id_index[payload.key] = payload.uid;
+          break;
+        case 'papers/updateOne':
+          if (nextState.papers[payload.id]) {
+            nextState.papers[payload.id] = { ...nextState.papers[payload.id], ...payload.changes };
+          }
+          break;
+        case 'graph/addNodes':
+          Object.assign(nextState.papers, payload.data.papers || {});
+          Object.assign(nextState.authors, payload.data.authors || {});
+          Object.assign(nextState.institutions, payload.data.institutions || {});
+          Object.assign(nextState.authorships, payload.data.authorships || {});
+          nextState.paper_relationships.push(...(payload.data.paper_relationships || []));
+          break;
+        case 'graph/applyAuthorMerge':
+          const { updates, deletions } = payload;
+          updates.authors.forEach(({ id, changes }: { id: string, changes: Partial<Author> }) => {
+            if (nextState.authors[id]) {
+              nextState.authors[id] = { ...nextState.authors[id], ...changes };
+            }
+          });
+          updates.authorships.forEach(({ id, changes }: { id: string, changes: Partial<Authorship> }) => {
+            if (nextState.authorships[id]) {
+              nextState.authorships[id] = { ...nextState.authorships[id], ...changes };
+            }
+          });
+          deletions.authors.forEach((id: string) => {
+            delete nextState.authors[id];
+          });
+          break;
+      }
+    }
+
+    return nextState;
+  }),
+  // --- END: NEW BATCH UPDATE ACTION IMPLEMENTATION ---
+}), { name: 'KnowledgeGraphStore' }));
+</file>
+
+<file path="src/components/MainAnalysisView.tsx">
+import React, { useMemo } from 'react';
+import { useKnowledgeGraphStore, Paper, Author } from '@/store/knowledge-graph-store';
+import { MasterPaperCard } from '@/components/MasterPaperCard';
+import { UnifiedCitationsTable } from '@/components/UnifiedCitationsTable';
+import { NetworkView } from '@/components/NetworkView';
+import { TopNav } from '@/components/TopNav';
+import { ExportButton } from '@/components/ExportButton';
+import { ProgressDisplay } from '@/components/ProgressDisplay';
+// FIX: Import the EnrichedPaper type from its new central location.
+import { EnrichedPaper } from '@/types';
+
+interface MainAnalysisViewProps {
+  onViewChange?: (viewName: string) => void;
+  currentView?: string;
+}
+
+// NOTE: The EnrichedPaper interface has been moved to src/types/index.ts
+
+export const MainAnalysisView: React.FC<MainAnalysisViewProps> = ({ 
+  onViewChange, 
+  currentView = 'Table' 
+}) => {
+  const { papers, authors, authorships, relation_to_master, app_status } = useKnowledgeGraphStore();
+  
+  const masterPaper = Object.values(papers).find(paper => !paper.is_stub && paper.publication_year);
+  
+  const isInitialLoading = ['loading', 'enriching'].includes(app_status.state);
+  const isExtending = app_status.state === 'extending';
+
+  const enrichedRelatedPapers = useMemo<EnrichedPaper[]>(() => {
+    if (!masterPaper) return [];
+
+    const relatedPaperUids = Object.keys(relation_to_master);
+
+    return relatedPaperUids
+      .map(uid => papers[uid])
+      .filter((paper): paper is Paper => !!paper)
+      .map(paper => {
+        const paperAuthorships = Object.values(authorships).filter(
+          auth => auth.paper_short_uid === paper.short_uid
+        );
+        const paperAuthors = paperAuthorships
+          .sort((a, b) => a.author_position - b.author_position)
+          .map(auth => authors[auth.author_short_uid])
+          .filter((author): author is Author => !!author);
+
+        const tags = relation_to_master[paper.short_uid] || [];
+
+        return {
+          ...paper,
+          authors: paperAuthors,
+          relationship_tags: tags,
+        };
+      });
+  }, [papers, authors, authorships, relation_to_master, masterPaper]);
+
+  if (isInitialLoading) {
+    return (
+      <div className="text-center py-20 max-w-2xl mx-auto">
+        <ProgressDisplay 
+          value={app_status.progress || 0} 
+          label={app_status.message || 'Loading...'} 
+        />
+      </div>
+    );
+  }
+
+  if (!masterPaper) {
+    return (
+      <div className="text-center py-20">
+        <p className="text-muted-foreground">No master paper found or analysis failed</p>
+      </div>
+    );
+  }
+  
+  const renderCurrentView = () => {
+    switch (currentView) {
+      case 'Table':
+        return <UnifiedCitationsTable papers={enrichedRelatedPapers} />;
+      case 'Network':
+        return <NetworkView papers={enrichedRelatedPapers} masterPaper={masterPaper} />;
+      default:
+        return <UnifiedCitationsTable papers={enrichedRelatedPapers} />;
+    }
+  };
+
+  return (
+    <div className="space-y-8">
+      <div className="hidden sm:flex justify-between items-center">
+        <TopNav 
+          items={['Table', 'Network']} 
+          active={currentView} 
+          onClick={onViewChange || (() => {})} 
+        />
+        <ExportButton />
+      </div>
+      
+      <MasterPaperCard paper={masterPaper} />
+      
+      <div>
+        <h2 className="text-2xl font-semibold mb-6">Related Papers</h2>
+        
+        {isExtending && app_status.message && (
+          <ProgressDisplay 
+            value={app_status.progress || 0} 
+            label={app_status.message} 
+          />
+        )}
+        
+        {renderCurrentView()}
+      </div>
+    </div>
+  );
+};
+</file>
+
+<file path="src/workers/graph-core/worker-handler.ts">
+// src/workers/graph-core/worker-handler.ts
+
+import { processOpenAlexPaper } from './entity-processors';
+import { fetchFirstDegreeCitations, fetchSecondDegreeCitations, hydrateStubPapers, hydrateMasterPaper } from './relationship-builder';
+import { enrichMasterPaperWithSemanticScholar } from './semantic-scholar';
+import { performAuthorReconciliation } from './author-reconciliation';
+import { getUtilityFunctions } from './utils';
+import { getState, resetState, setMasterPaperUid, setStubCreationThreshold } from './state';
+import { normalizeOpenAlexId } from '../../services/openAlex-util';
+import type { WorkerMessage } from './types';
+import { PHASE_A_B_WEIGHTS, PHASE_C_WEIGHTS } from '../../config/progress-weights';
+
+let messageQueue: WorkerMessage[] = [];
+let batchIntervalId: ReturnType<typeof setInterval> | null = null;
+const BATCHABLE_TYPES = ['graph/reset', 'graph/addPaper', 'graph/addAuthor', 'graph/addInstitution', 'graph/addAuthorship', 'graph/addRelationship', 'graph/addRelationshipTag', 'graph/setExternalId', 'papers/updateOne', 'graph/addNodes', 'graph/applyAuthorMerge'];
+function flushQueue() { if (messageQueue.length > 0) { self.postMessage(messageQueue); messageQueue = []; } }
+function postMessageWithBatching(type: string, payload: any) { if (BATCHABLE_TYPES.includes(type)) { messageQueue.push({ type, payload }); } else { self.postMessage({ type, payload }); } }
+function startBatching() { if (batchIntervalId === null) { batchIntervalId = setInterval(flushQueue, 250); } }
+function stopBatching() { if (batchIntervalId !== null) { clearInterval(batchIntervalId); batchIntervalId = null; } flushQueue(); }
+
+export function setupWorkerMessageHandler() {
+  self.addEventListener('message', (event: MessageEvent<WorkerMessage>) => {
+    const { type, payload } = event.data;
+    const getEnhancedUtils = () => ({ ...getUtilityFunctions(), postMessage: postMessageWithBatching });
+
+    switch (type) {
+      case 'graph/processMasterPaper':
+        (async () => {
+          const utils = getEnhancedUtils();
+          try {
+            console.log("--- [Worker] Received 'graph/processMasterPaper'. Starting Phases A & B. ---");
+            resetState();
+            startBatching();
+            
+            utils.postMessage('graph/reset', {});
+            utils.postMessage('app_status/update', { state: 'loading' });
+            utils.postMessage('progress/update', { progress: PHASE_A_B_WEIGHTS.INITIALIZING, message: 'Initializing analysis...' });
+
+            setStubCreationThreshold(payload.stub_creation_threshold || 3);
+            
+            const cleanMasterPaper = { ...payload.paper, id: normalizeOpenAlexId(payload.paper.id) };
+            const initialState = getState();
+            const masterUid = await processOpenAlexPaper(cleanMasterPaper, false, initialState.papers, initialState.authors, initialState.institutions, initialState.authorships, utils);
+            setMasterPaperUid(masterUid);
+            
+            if (cleanMasterPaper.id) {
+              utils.postMessage('progress/update', { progress: PHASE_A_B_WEIGHTS.FETCH_FIRST_DEGREE, message: 'Fetching direct citations...' });
+              await fetchFirstDegreeCitations(cleanMasterPaper.id, getState, utils);              
+              
+              utils.postMessage('progress/update', { progress: PHASE_A_B_WEIGHTS.ENRICH_SEMANTIC_SCHOLAR, message: 'Enriching with external data...' });
+              await enrichMasterPaperWithSemanticScholar(getState, utils);
+            }
+            
+            utils.postMessage('app_status/update', { state: 'enriching' });
+            utils.postMessage('progress/update', { progress: PHASE_A_B_WEIGHTS.HYDRATE_MASTER_PAPER, message: 'Hydrating master paper details...' });
+            await hydrateMasterPaper(getState, utils);
+
+            utils.postMessage('progress/update', { progress: PHASE_A_B_WEIGHTS.RECONCILE_AUTHORS, message: 'Reconciling authors...' });
+            await performAuthorReconciliation(getState, utils);
+            
+            console.log('--- [Worker] Phases A & B Complete. ---');
+            utils.postMessage('progress/update', { progress: PHASE_A_B_WEIGHTS.COMPLETE, message: 'Enrichment complete.' });
+            utils.postMessage('enrichment/complete', { status: 'success' });
+
+          } catch (error) {
+            console.error('[Worker] A fatal error occurred during graph build:', error);
+            utils.postMessage('error/fatal', { message: `Worker error: ${error instanceof Error ? error.message : 'Unknown error'}` });
+          } finally {
+            stopBatching();
+          }
+        })();
+        break;
+
+      case 'graph/extend':
+        (async () => {
+          const utils = getEnhancedUtils();
+          try {
+            console.log('--- [Worker] Received "graph/extend". Starting Phase C. ---');
+            startBatching();
+            
+            // FIX: The logic that accepted and merged a payload has been removed.
+            // The worker now trusts its own internal state, which was established
+            // during the initial 'graph/processMasterPaper' task. This makes the
+            // worker truly stateful and preserves the masterPaperUid.
+
+            utils.postMessage('app_status/update', { state: 'extending' });
+            
+            let overallProgress = PHASE_A_B_WEIGHTS.COMPLETE;
+            const updateAndPostProgress = (stepProgress: number, message: string) => {
+              overallProgress += stepProgress;
+              utils.postMessage('progress/update', { progress: Math.min(overallProgress, 99), message });
+            };
+
+            const progressAwareUtils = { ...utils, updateAndPostProgress };
+
+            await fetchSecondDegreeCitations(getState, progressAwareUtils, PHASE_C_WEIGHTS);
+            await hydrateStubPapers(getState, progressAwareUtils, PHASE_C_WEIGHTS);
+
+            console.log('--- [Worker] Phase C Complete. Graph extension finished. ---');
+            utils.postMessage('progress/update', { progress: 100, message: 'Analysis complete!' });
+            utils.postMessage('app_status/update', { state: 'active', message: null });
+          } catch (error) {
+            console.error('[Worker] Error during graph extension:', error);
+            utils.postMessage('error/fatal', { message: `Extension error: ${error instanceof Error ? error.message : 'Unknown error'}` });
+          } finally {
+            stopBatching();
+          }
+        })();
+        break;
+        
+      default:
+        console.warn('[Worker] Unknown message type:', type);
+    }
+  });
+}
+</file>
+
+<file path="src/workers/graph-core/relationship-builder.ts">
+import { openAlexService } from '../../services/openAlex';
+import { processOpenAlexPaper } from './entity-processors';
+import { getUtilityFunctions, chunkArray } from './utils';
+import { Paper, PaperRelationship, UtilityFunctions, GraphState } from './types';
+import { normalizeOpenAlexId } from '../../services/openAlex-util';
+
+const API_BATCH_SIZE = 100;
+
+// --- 1st DEGREE CITATIONS ---
+export async function fetchFirstDegreeCitations(masterPaperId: string, getState: Function, utils: UtilityFunctions) {
+  console.log('[Worker] Phase A, Step 2: Fetching 1st degree citations from OpenAlex.');
+  
+  const response = await openAlexService.fetchCitations(masterPaperId);
+  const allCitations = response.results;
+
+  let referencedBy1stDegreeStubs: Record<string, number> = {};
+
+  for (const citation of allCitations) {
+    const { papers, authors, institutions, authorships } = getState();
+    const citationUid = await processOpenAlexPaper(citation, true, papers, authors, institutions, authorships, utils);
+    
+    const relationship = {
+      source_short_uid: citationUid,
+      target_short_uid: getState().masterPaperUid,
+      relationship_type: 'cites' as const,
+    };
+    utils.postMessage('graph/addRelationship', { relationship });
+    getState().paperRelationships.push(relationship);
+
+    utils.postMessage('graph/addRelationshipTag', {
+      paperUid: citationUid,
+      tag: '1st_degree'
+    });
+
+    if (citation.referenced_works) {
+      for (const refId of citation.referenced_works) {
+        if (refId) {
+          referencedBy1stDegreeStubs[refId] = (referencedBy1stDegreeStubs[refId] || 0) + 1;
+        }
+      }
+    }
+  }
+
+  const stubCreationThreshold = getState().stubCreationThreshold;
+  const commonlyCoCited = Object.entries(referencedBy1stDegreeStubs)
+    .filter(([, count]) => count >= stubCreationThreshold)
+    .map(([id]) => id);
+
+  for (const paperId of commonlyCoCited) {
+    const cleanPaperId = normalizeOpenAlexId(paperId);
+    if (cleanPaperId === masterPaperId) continue;
+
+    const { papers, authors, institutions, authorships } = getState();
+    const paperUid = await processOpenAlexPaper({ id: paperId }, true, papers, authors, institutions, authorships, utils);
+    
+    utils.postMessage('graph/addRelationshipTag', {
+      paperUid: paperUid,
+      tag: 'referenced_by_1st_degree'
+    });
+  }
+  
+  console.log(`[Worker] Phase A, Step 2: Processed ${allCitations.length} citations, found ${commonlyCoCited.length} referenced_by_1st_degree stubs.`);
+}
+
+// --- 2nd DEGREE CITATIONS ---
+export async function fetchSecondDegreeCitations(getState: Function, utils: UtilityFunctions & { updateAndPostProgress: Function }, progressWeights: { FETCH_SECOND_DEGREE: number }) {
+  console.log('[Worker] Phase C, Step 8: Fetching 2nd degree citations.');
+  const { papers, paperRelationships, externalIdIndex, masterPaperUid } = getState() as GraphState;
+
+  const firstDegreePaperUids = paperRelationships
+    .filter((r: PaperRelationship) => r.target_short_uid === masterPaperUid && r.relationship_type === 'cites')
+    .map((r: PaperRelationship) => r.source_short_uid);
+
+  const firstDegreePapers = firstDegreePaperUids.map((uid: string) => papers[uid]).filter(Boolean);
+  
+  if (firstDegreePapers.length === 0) {
+    console.log('[Worker] No 1st-degree papers found in worker state. Skipping 2nd-degree fetch.');
+    return;
+  }
+
+  const reverseIndex: Record<string, string> = {};
+  for (const [key, value] of Object.entries(externalIdIndex)) {
+    if (key.startsWith('openalex:')) {
+      const openAlexId = key.substring('openalex:'.length);
+      reverseIndex[value] = openAlexId;
+    }
+  }
+
+  const workIds = firstDegreePapers
+    .map((p: Paper) => reverseIndex[p.short_uid])
+    .filter(Boolean);
+
+  const totalCalls = Math.ceil(workIds.length / API_BATCH_SIZE);
+  const progressPerCall = progressWeights.FETCH_SECOND_DEGREE / totalCalls;
+  let callsMade = 0;
+  let secondDegreeCount = 0;
+
+  const chunks = chunkArray(workIds, API_BATCH_SIZE);
+
+  for (const chunk of chunks) {
+    if (chunk.length === 0) continue;
+
+    const response = await openAlexService.fetchCitationsForMultiplePapers(chunk);
+    const allCitations = response.results;
+
+    for (const citation of allCitations) {
+      const referencedWorksNormalized = citation.referenced_works.map(id => normalizeOpenAlexId(id));
+      const cited1stDegreeId = chunk.find(id => referencedWorksNormalized.includes(id));
+      
+      if (!cited1stDegreeId) continue;
+      
+      const cited1stDegreeUid = Object.keys(reverseIndex).find(key => reverseIndex[key] === cited1stDegreeId);
+      if (!cited1stDegreeUid) continue;
+
+      const { papers, authors, institutions, authorships } = getState();
+      const citationUid = await processOpenAlexPaper(citation, true, papers, authors, institutions, authorships, utils);
+      
+      const relationship = {
+        source_short_uid: citationUid,
+        target_short_uid: cited1stDegreeUid,
+        relationship_type: 'cites' as const,
+      };
+      utils.postMessage('graph/addRelationship', { relationship });
+      getState().paperRelationships.push(relationship);
+      
+      utils.postMessage('graph/addRelationshipTag', {
+        paperUid: citationUid,
+        tag: '2nd_degree'
+      });
+      secondDegreeCount++;
+    }
+    callsMade++;
+    utils.updateAndPostProgress(progressPerCall, `Fetching second-degree citations... (${callsMade}/${totalCalls})`);
+  }
+
+  console.log(`[Worker] Found ${secondDegreeCount} 2nd degree citations.`);
+}
+
+
+// --- HYDRATE STUB PAPERS ---
+export async function hydrateStubPapers(getState: Function, utils: UtilityFunctions & { updateAndPostProgress: Function }, progressWeights: { HYDRATE_STUBS: number }) {
+  console.log('[Worker] Phase C, Step 9: Hydrating stub papers.');
+  const { papers, externalIdIndex } = getState() as GraphState;
+  const stubPapers = Object.values(papers).filter((p: Paper) => p.is_stub);
+  
+  if (stubPapers.length === 0) return;
+
+  const reverseIndex: Record<string, string> = {};
+  for (const [key, value] of Object.entries(externalIdIndex)) {
+    if (key.startsWith('openalex:')) {
+      const openAlexId = key.substring('openalex:'.length);
+      reverseIndex[value] = openAlexId;
+    }
+  }
+
+  const totalCalls = Math.ceil(stubPapers.length / API_BATCH_SIZE);
+  const progressPerCall = progressWeights.HYDRATE_STUBS / totalCalls;
+  let callsMade = 0;
+
+  const chunks = chunkArray(stubPapers, API_BATCH_SIZE);
+
+  for (const chunk of chunks) {
+    const workIds = chunk
+      .map((p: Paper) => reverseIndex[p.short_uid])
+      .filter(Boolean);
+
+    if (workIds.length === 0) continue;
+
+    const response = await openAlexService.fetchMultiplePapers(workIds);
+    const hydratedPapers = response.results;
+
+    for (const paperData of hydratedPapers) {
+      const { papers, authors, institutions, authorships } = getState();
+      await processOpenAlexPaper(paperData, false, papers, authors, institutions, authorships, utils);
+    }
+    callsMade++;
+    utils.updateAndPostProgress(progressPerCall, `Hydrating related papers... (${callsMade}/${totalCalls})`);
+  }
+  console.log(`[Worker] Successfully hydrated ${stubPapers.length} stub papers.`);
+}
+
+// --- HYDRATE MASTER PAPER ---
+export async function hydrateMasterPaper(getState: Function, utils: UtilityFunctions) {
+  console.log('[Worker] Phase B, Step 4: Hydrating Master Paper from OpenAlex.');
+  const { masterPaperUid, papers } = getState();
+  if (!masterPaperUid || !papers[masterPaperUid] || !papers[masterPaperUid].is_stub) {
+    return;
+  }
+
+  const masterPaperData = await openAlexService.fetchPaperDetails(masterPaperUid);
+
+  if (masterPaperData) {
+    const { papers, authors, institutions, authorships } = getState();
+    await processOpenAlexPaper(masterPaperData, false, papers, authors, institutions, authorships, utils);
+    console.log('[Worker] Phase B, Step 4: Master Paper hydration complete.');
+  }
+}
+</file>
+
+</files>

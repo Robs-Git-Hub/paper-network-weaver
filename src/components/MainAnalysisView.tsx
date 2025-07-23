@@ -33,7 +33,10 @@ export const MainAnalysisView: React.FC<MainAnalysisViewProps> = ({
 
     const relatedPaperUids = Object.keys(relation_to_master);
 
-    return relatedPaperUids
+    // --- DIAGNOSTIC LOG 1 ---
+    console.log('[Diagnosis] Number of related paper UIDs found in state:', relatedPaperUids.length);
+
+    const enrichedPapers = relatedPaperUids
       .map(uid => papers[uid])
       .filter((paper): paper is Paper => !!paper)
       .map(paper => {
@@ -53,6 +56,12 @@ export const MainAnalysisView: React.FC<MainAnalysisViewProps> = ({
           relationship_tags: tags,
         };
       });
+
+    // --- DIAGNOSTIC LOG 2 ---
+    console.log('[Diagnosis] Total number of enriched papers being sent to the UI for rendering:', enrichedPapers.length);
+      
+    return enrichedPapers;
+
   }, [papers, authors, authorships, relation_to_master, masterPaper]);
 
   if (isInitialLoading) {
