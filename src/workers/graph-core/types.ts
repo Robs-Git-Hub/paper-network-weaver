@@ -17,6 +17,7 @@ export interface Paper {
   keywords: string[];
   best_oa_url: string | null;
   oa_status: string | null;
+  article_landing_page: string | null;
   is_stub: boolean;
   // relationship_tags has been removed.
 }
@@ -88,6 +89,7 @@ export interface OpenAlexPaper {
     source?: {
       display_name?: string;
     };
+    landing_page_url?: string;
   };
   fwci?: number;
   cited_by_count?: number;

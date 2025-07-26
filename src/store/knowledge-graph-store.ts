@@ -20,6 +20,7 @@ export interface Paper {
   keywords: string[];
   best_oa_url: string | null;
   oa_status: string | null;
+  article_landing_page: string | null;
   is_stub: boolean;
   relationship_tags?: string[];
 }
