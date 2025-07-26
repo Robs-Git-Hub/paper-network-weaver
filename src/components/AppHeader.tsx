@@ -40,7 +40,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       <div className="container flex h-14 items-center justify-between">
         <button 
           onClick={handleLogoClick}
-          className="text-lg font-semibold text-[#437e84] hover:text-[#437e84]/80 transition-colors cursor-pointer"
+          className="text-lg font-semibold text-primary hover:text-primary/80 transition-colors cursor-pointer"
         >
           ACE
         </button>
@@ -49,7 +49,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
         <div className="hidden sm:flex items-center gap-4">
           {isEnriching && (
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-[#437e84] rounded-full animate-pulse" />
+              <div className="w-2 h-2 bg-primary rounded-full animate-pulse" />
               <span className="text-xs text-muted-foreground">
                 Fetching paper details...
               </span>
@@ -71,7 +71,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
         <div className="flex sm:hidden items-center gap-2">
           {isEnriching && (
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-[#437e84] rounded-full animate-pulse" />
+              <div className="w-2 h-2 bg-primary rounded-full animate-pulse" />
             </div>
           )}
           

@@ -28,13 +28,13 @@ export const SearchBar: React.FC<SearchBarProps> = ({ onSearch, isLoading }) => 
           placeholder="Enter the full title of a research paper..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          className="pl-10 pr-24 py-3 text-base focus:ring-2 focus:ring-[#437e84] focus:border-[#437e84]"
+          className="pl-10 pr-24 py-3 text-base focus:ring-2 focus:ring-primary focus:border-primary"
           disabled={isLoading}
         />
         <Button
           type="submit"
           disabled={!query.trim() || isLoading}
-          className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-[#437e84] hover:bg-[#437e84]/90"
+          className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-primary hover:bg-primary/90 text-primary-foreground"
         >
           {isLoading ? 'Searching...' : 'Search'}
         </Button>

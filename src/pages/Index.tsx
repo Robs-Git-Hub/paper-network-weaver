@@ -78,7 +78,7 @@ const Index = () => {
               setAppStatus({ state: 'idle', message: null });
               workerManager.initialize();
             }}
-            className="px-4 py-2 bg-[#437e84] text-white rounded hover:bg-[#437e84]/90"
+            className="px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90"
           >
             Try Again
           </button>

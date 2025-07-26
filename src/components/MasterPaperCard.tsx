@@ -22,7 +22,7 @@ export const MasterPaperCard: React.FC<MasterPaperCardProps> = ({ paper }) => {
     .filter(Boolean);
 
   return (
-    <Card className="border-2 border-[#437e84]">
+    <Card className="border-2 border-primary">
       <CardHeader>
         <CardTitle className="text-lg">{paper.title}</CardTitle>
       </CardHeader>
