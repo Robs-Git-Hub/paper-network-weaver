@@ -98,7 +98,25 @@ export const CitationsTable: React.FC<CitationsTableProps> = ({ papers }) => {
     {
       accessorKey: 'title',
       header: 'Title',
-      cell: ({ row }) => <div className="font-medium">{row.original.title}</div>,
+      cell: ({ row }) => {
+        const title = row.original.title;
+        const landingPage = row.original.article_landing_page;
+        
+        if (landingPage) {
+          return (
+            <a 
+              href={landingPage} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="font-medium text-primary hover:underline"
+            >
+              {title}
+            </a>
+          );
+        }
+        
+        return <div className="font-medium">{title}</div>;
+      },
       size: 384,
     },
     {
@@ -220,7 +238,20 @@ export const CitationsTable: React.FC<CitationsTableProps> = ({ papers }) => {
           return (
             <Card key={paper.short_uid}>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base font-medium leading-tight">{paper.title}</CardTitle>
+                <CardTitle className="text-base font-medium leading-tight">
+                  {paper.article_landing_page ? (
+                    <a 
+                      href={paper.article_landing_page} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline"
+                    >
+                      {paper.title}
+                    </a>
+                  ) : (
+                    paper.title
+                  )}
+                </CardTitle>
                 {paper.relationship_tags && (
                   <div className="flex flex-wrap gap-1 mt-2">
                     {paper.relationship_tags.map(tag => (
