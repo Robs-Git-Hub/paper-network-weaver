@@ -18,7 +18,7 @@ function chunkArray<T>(array: T[], chunkSize: number): T[][] {
 }
 
 const OPENALEX_FIELD_SETS = {
-  SEARCH_PREVIEW: ['id', 'doi', 'display_name', 'publication_year', 'authorships', 'primary_location'],
+  SEARCH_PREVIEW: ['id', 'doi', 'display_name', 'publication_year', 'authorships', 'primary_location', 'cited_by_count'],
   FULL_INGESTION: ['id', 'ids', 'doi', 'title', 'publication_year', 'publication_date', 'type', 'language', 'authorships', 'primary_location', 'fwci', 'cited_by_count', 'abstract_inverted_index', 'best_oa_location', 'open_access', 'keywords', 'referenced_works', 'related_works'],
   AUTHOR_RECONCILIATION: ['doi', 'authorships'],
   STUB_CREATION: ['id', 'ids', 'doi', 'title', 'display_name', 'publication_year', 'publication_date', 'primary_location', 'cited_by_count', 'type', 'authorships']

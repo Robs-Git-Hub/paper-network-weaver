@@ -47,6 +47,12 @@ export const PaperSelector: React.FC<PaperSelectorProps> = ({
                       <span>{paper.publication_year}</span>
                     </>
                   )}
+                  {paper.cited_by_count !== undefined && (
+                    <>
+                      <span>•</span>
+                      <span>Initial citation count: {paper.cited_by_count}</span>
+                    </>
+                  )}
                 </div>
                 
                 {paper.primary_location?.source?.display_name && (
