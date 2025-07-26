@@ -81,7 +81,10 @@ export const PaperSelector: React.FC<PaperSelectorProps> = ({
             {cardContent}
           </TooltipTrigger>
           <TooltipContent>
-            ACE is currently only able to process papers that have been cited between 1 and 200 times
+            {paper.cited_by_count === 0 
+              ? "No citations found for this paper." 
+              : "ACE is currently only able to process papers that have been cited up to 200 times"
+            }
           </TooltipContent>
         </Tooltip>
       );
