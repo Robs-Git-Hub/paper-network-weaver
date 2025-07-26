@@ -23,6 +23,18 @@ export const NetworkView: React.FC<NetworkViewProps> = ({ papers, masterPaper })
     setLegendSelected
   } = useRelationshipFilters(papers);
 
+  // Mapping from filter values to legend category names
+  const filterToLegendMap = {
+    '1st_degree': 'Direct Citations',
+    '2nd_degree': 'Second-Degree',
+    'referenced_by_1st_degree': 'Co-Cited'
+  };
+
+  // Reverse mapping from legend category names to filter values
+  const legendToFilterMap = Object.fromEntries(
+    Object.entries(filterToLegendMap).map(([filter, legend]) => [legend, filter])
+  );
+
   const chartData = useMemo(() => {
     return transformPapersToNetwork(
       filteredPapers,
@@ -139,10 +151,12 @@ export const NetworkView: React.FC<NetworkViewProps> = ({ papers, masterPaper })
               legendselectchanged: (params: any) => {
                 setLegendSelected(params.selected);
                 
-                // Update active filters based on legend selection
-                const newActiveFilters = activeFilters.filter(filter => {
-                  const categoryName = filter.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
-                  return params.selected[categoryName] !== false;
+                // Update active filters based on legend selection using proper mapping
+                const newActiveFilters: string[] = [];
+                Object.entries(params.selected).forEach(([legendName, isSelected]) => {
+                  if (isSelected && legendToFilterMap[legendName]) {
+                    newActiveFilters.push(legendToFilterMap[legendName]);
+                  }
                 });
                 setActiveFilters(newActiveFilters);
               }
