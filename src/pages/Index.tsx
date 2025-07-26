@@ -123,7 +123,11 @@ const Index = () => {
             </p>
           </div>
 
-          <SearchBar onSearch={handleSearch} isLoading={isSearching} />
+          <SearchBar 
+            onSearch={handleSearch} 
+            isLoading={isSearching}
+            exampleQuery="Understanding cybersecurity capacity building"
+          />
 
           {searchResults.length > 0 && (
             <PaperSelector
