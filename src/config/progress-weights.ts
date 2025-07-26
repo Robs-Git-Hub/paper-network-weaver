@@ -23,11 +23,9 @@ export const PHASE_A_B_WEIGHTS = {
 // --- Phase C (Background Extension) ---
 // These weights are relative to the start of Phase C (which begins at 70% of the overall progress).
 export const PHASE_C_WEIGHTS = {
-  // This is the most time-consuming step. We allocate 80% of the Phase C duration to it.
-  // The progress within this step will be subdivided by the number of API calls.
-  FETCH_SECOND_DEGREE: 80,
+  // First half of Phase C - fetching second-degree citations
+  FETCH_SECOND_DEGREE: 50,
 
-  // This step is generally faster. We allocate 20% of the Phase C duration to it.
-  // Progress will also be subdivided by the number of API calls.
-  HYDRATE_STUBS: 20,
+  // Second half of Phase C - hydrating stub papers
+  HYDRATE_STUBS: 50,
 };
