@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, MousePointer, Network, BarChart3, Users } from 'lucide-react';
+import { Search, MousePointer, Network, BarChart3, Download } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
@@ -29,9 +29,9 @@ const About: React.FC = () => {
       description: "Explore citation patterns through table and network visualizations"
     },
     {
-      icon: Users,
-      title: "Connect & Export",
-      description: "Find related researchers and export your findings for further analysis"
+      icon: Download,
+      title: "Export",
+      description: "Export your citation data with a comprehensive table description file"
     }
   ];
 
@@ -106,13 +106,21 @@ const About: React.FC = () => {
           </div>
         </section>
 
-        {/* Vision Section */}
+        {/* Created By Section */}
         <section className="mb-16">
           <Card className="bg-primary/5 border-primary/20">
             <CardContent className="pt-6">
-              <h2 className="text-2xl font-semibold text-foreground mb-4">Our Vision</h2>
+              <h2 className="text-2xl font-semibold text-foreground mb-4">Created By</h2>
               <p className="text-lg leading-relaxed text-muted-foreground mb-6">
-                We believe that understanding citation networks is crucial for advancing research and fostering academic collaboration. ACE makes this complex data accessible and actionable for researchers at all levels.
+                ACE was created by Robert Collett as a tool to track how his own work was used by others. Follow his work and connect via{' '}
+                <a 
+                  href="https://www.linkedin.com/in/robert-collett/" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-primary hover:text-primary/80 underline font-medium"
+                >
+                  LinkedIn
+                </a>.
               </p>
               <Button onClick={() => navigate('/')} className="bg-primary hover:bg-primary/90">
                 Start Exploring
