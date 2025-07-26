@@ -77,7 +77,7 @@ export const transformPapersToNetwork = (
   // Create nodes
   const nodes: NetworkNode[] = [];
   const categories: NetworkCategory[] = [
-    { name: 'Master Paper', itemStyle: { color: 'hsl(222.2 47.4% 11.2%)' } },
+    { name: 'Master Paper', itemStyle: { color: 'hsl(186 33% 39%)' } },
     { name: 'Direct Citations', itemStyle: { color: RELATIONSHIP_COLORS['1st_degree'] } },
     { name: 'Second-Degree', itemStyle: { color: RELATIONSHIP_COLORS['2nd_degree'] } },
     { name: 'Co-Cited', itemStyle: { color: RELATIONSHIP_COLORS['referenced_by_1st_degree'] } },
@@ -98,7 +98,7 @@ export const transformPapersToNetwork = (
     value: masterPaper.cited_by_count,
     category: 0, // Master paper category
     symbolSize: 80,
-    itemStyle: { color: 'hsl(222.2 47.4% 11.2%)' },
+    itemStyle: { color: 'hsl(186 33% 39%)' },
     label: { show: true },
     paperData: {
       title: masterPaper.title,
