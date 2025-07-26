@@ -135,6 +135,18 @@ export const NetworkView: React.FC<NetworkViewProps> = ({ papers, masterPaper })
             option={option} 
             style={{ height: '100%', width: '100%' }}
             opts={{ renderer: 'canvas' }}
+            onEvents={{
+              legendselectchanged: (params: any) => {
+                setLegendSelected(params.selected);
+                
+                // Update active filters based on legend selection
+                const newActiveFilters = activeFilters.filter(filter => {
+                  const categoryName = filter.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+                  return params.selected[categoryName] !== false;
+                });
+                setActiveFilters(newActiveFilters);
+              }
+            }}
           />
         </div>
       ) : (
