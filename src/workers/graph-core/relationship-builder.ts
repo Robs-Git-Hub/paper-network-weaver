@@ -14,7 +14,7 @@ export async function fetchFirstDegreeCitations(masterPaperId: string, getState:
   const response = await openAlexService.fetchCitations(masterPaperId);
   const allCitations = response.results;
 
-  let referencedBy1stDegreeStubs: Record<string, number> = {};
+  let referencedBy1stDegreeStubs: Record<string, string[]> = {};
 
   for (const citation of allCitations) {
     const { papers, authors, institutions, authorships } = getState();
@@ -36,7 +36,10 @@ export async function fetchFirstDegreeCitations(masterPaperId: string, getState:
     if (citation.referenced_works) {
       for (const refId of citation.referenced_works) {
         if (refId) {
-          referencedBy1stDegreeStubs[refId] = (referencedBy1stDegreeStubs[refId] || 0) + 1;
+          if (!referencedBy1stDegreeStubs[refId]) {
+            referencedBy1stDegreeStubs[refId] = [];
+          }
+          referencedBy1stDegreeStubs[refId].push(citationUid);
         }
       }
     }
@@ -44,10 +47,10 @@ export async function fetchFirstDegreeCitations(masterPaperId: string, getState:
 
   const stubCreationThreshold = getState().stubCreationThreshold;
   const commonlyCoCited = Object.entries(referencedBy1stDegreeStubs)
-    .filter(([, count]) => count >= stubCreationThreshold)
-    .map(([id]) => id);
+    .filter(([, citingPapers]) => citingPapers.length >= stubCreationThreshold)
+    .map(([id, citingPapers]) => ({ id, citingPapers }));
 
-  for (const paperId of commonlyCoCited) {
+  for (const { id: paperId, citingPapers } of commonlyCoCited) {
     const cleanPaperId = normalizeOpenAlexId(paperId);
     if (cleanPaperId === masterPaperId) continue;
 
@@ -58,6 +61,17 @@ export async function fetchFirstDegreeCitations(masterPaperId: string, getState:
       paperUid: paperUid,
       tag: 'referenced_by_1st_degree'
     });
+
+    // Create citation relationships from 1st degree papers to co-cited papers
+    for (const citingPaperUid of citingPapers) {
+      const relationship = {
+        source_short_uid: citingPaperUid,
+        target_short_uid: paperUid,
+        relationship_type: 'cites' as const,
+      };
+      utils.postMessage('graph/addRelationship', { relationship });
+      getState().paperRelationships.push(relationship);
+    }
   }
   
   console.log(`[Worker] Phase A, Step 2: Processed ${allCitations.length} citations, found ${commonlyCoCited.length} referenced_by_1st_degree stubs.`);
