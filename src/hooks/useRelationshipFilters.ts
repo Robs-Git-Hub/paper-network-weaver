@@ -14,6 +14,11 @@ export const RELATIONSHIP_FILTERS = [
 export const useRelationshipFilters = (papers: EnrichedPaper[]) => {
   const { relation_to_master } = useKnowledgeGraphStore();
   const [activeFilters, setActiveFilters] = useState<string[]>(['1st_degree']);
+  const [legendSelected, setLegendSelected] = useState<Record<string, boolean>>({
+    'Direct Citations': true,
+    'Second-Degree': false,
+    'Co-Cited': false
+  });
 
   const filteredPapers = useMemo(() => {
     // If no filters are active, return all papers provided to the hook.
@@ -48,6 +53,8 @@ export const useRelationshipFilters = (papers: EnrichedPaper[]) => {
     activeFilters,
     setActiveFilters,
     filteredPapers,
-    filterCounts
+    filterCounts,
+    legendSelected,
+    setLegendSelected
   };
 };
