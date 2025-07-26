@@ -103,7 +103,7 @@ export const MainAnalysisView: React.FC<MainAnalysisViewProps> = ({
         
         {isExtending && app_status.message && (
           <ProgressDisplay 
-            value={app_status.progress || 0} 
+            value={app_status.phaseCProgress || 0} 
             label={app_status.message} 
           />
         )}

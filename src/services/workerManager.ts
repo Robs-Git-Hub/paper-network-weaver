@@ -86,7 +86,8 @@ class WorkerManager {
           case 'progress/update':
             storeActions.setAppStatus({ 
               message: payload.message, 
-              progress: payload.progress 
+              progress: payload.progress,
+              phaseCProgress: payload.phaseCProgress
             });
             break;
           case 'app_status/update':

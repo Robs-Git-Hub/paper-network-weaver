@@ -58,6 +58,7 @@ export interface AppStatus {
   state: 'idle' | 'loading' | 'enriching' | 'extending' | 'active' | 'error';
   message: string | null;
   progress?: number;
+  phaseCProgress?: number;
 }
 
 interface WorkerMessage {
