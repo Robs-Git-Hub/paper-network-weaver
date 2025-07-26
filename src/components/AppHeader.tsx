@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
-import { MoreHorizontal, Menu } from 'lucide-react';
+import { MoreHorizontal, Menu, Info } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useKnowledgeGraphStore } from '@/store/knowledge-graph-store';
 import {
@@ -28,6 +29,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 }) => {
   const { setAppStatus } = useKnowledgeGraphStore();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const navigate = useNavigate();
 
   const handleLogoClick = () => {
     setAppStatus({ state: 'idle', message: null });
@@ -54,8 +56,14 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
             </div>
           )}
           
-          <Button variant="ghost" size="sm">
-            <MoreHorizontal className="h-4 w-4" />
+          <Button 
+            variant="ghost" 
+            size="sm"
+            onClick={() => navigate('/about')}
+            className="gap-2"
+          >
+            <Info className="h-4 w-4" />
+            About
           </Button>
         </div>
 
@@ -100,9 +108,16 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                 )}
                 
                 <div>
-                  <Button variant="ghost" className="w-full justify-start">
-                    <MoreHorizontal className="h-4 w-4 mr-2" />
-                    More Options
+                  <Button 
+                    variant="ghost" 
+                    className="w-full justify-start"
+                    onClick={() => {
+                      navigate('/about');
+                      setIsMenuOpen(false);
+                    }}
+                  >
+                    <Info className="h-4 w-4 mr-2" />
+                    About ACE
                   </Button>
                 </div>
               </div>
