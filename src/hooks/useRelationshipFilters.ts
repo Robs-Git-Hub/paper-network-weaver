@@ -15,20 +15,25 @@ export const useRelationshipFilters = (papers: EnrichedPaper[]) => {
   const { relation_to_master } = useKnowledgeGraphStore();
   const [activeFilters, setActiveFilters] = useState<string[]>(['1st_degree']);
   const [legendSelected, setLegendSelected] = useState<Record<string, boolean>>({
+    'Master Paper': true,
     'Direct Citations': true,
     'Second-Degree': false,
     'Co-Cited': false
   });
+  const [isUpdatingFromChart, setIsUpdatingFromChart] = useState(false);
 
   // Sync legendSelected with activeFilters when filters change
   useEffect(() => {
+    if (isUpdatingFromChart) return; // Prevent circular updates
+    
     const newLegendSelected: Record<string, boolean> = {
+      'Master Paper': true, // Always keep Master Paper active
       'Direct Citations': activeFilters.includes('1st_degree'),
       'Second-Degree': activeFilters.includes('2nd_degree'),
       'Co-Cited': activeFilters.includes('referenced_by_1st_degree')
     };
     setLegendSelected(newLegendSelected);
-  }, [activeFilters]);
+  }, [activeFilters, isUpdatingFromChart]);
 
   const filteredPapers = useMemo(() => {
     // If no filters are active, return all papers provided to the hook.
@@ -65,6 +70,7 @@ export const useRelationshipFilters = (papers: EnrichedPaper[]) => {
     filteredPapers,
     filterCounts,
     legendSelected,
-    setLegendSelected
+    setLegendSelected,
+    setIsUpdatingFromChart
   };
 };

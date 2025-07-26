@@ -1,5 +1,5 @@
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef, useEffect } from 'react';
 import ReactECharts from 'echarts-for-react';
 import { useKnowledgeGraphStore } from '@/store/knowledge-graph-store';
 import { transformPapersToNetwork } from '@/utils/network-data-transformer';
@@ -20,8 +20,11 @@ export const NetworkView: React.FC<NetworkViewProps> = ({ papers, masterPaper })
     filteredPapers,
     filterCounts,
     legendSelected,
-    setLegendSelected
+    setLegendSelected,
+    setIsUpdatingFromChart
   } = useRelationshipFilters(papers);
+
+  const chartRef = useRef<ReactECharts>(null);
 
   // Mapping from filter values to legend category names
   const filterToLegendMap = {
@@ -72,10 +75,7 @@ export const NetworkView: React.FC<NetworkViewProps> = ({ papers, masterPaper })
     legend: {
       show: true,
       data: chartData.categories.map(cat => cat.name),
-      selected: {
-        'Master Paper': true, // Always show master paper
-        ...legendSelected
-      },
+      selected: legendSelected,
       top: 20,
       left: 'center'
     },
@@ -121,7 +121,19 @@ export const NetworkView: React.FC<NetworkViewProps> = ({ papers, masterPaper })
         }
       }
     ]
-  }), [chartData]);
+  }), [chartData, legendSelected]);
+
+  // Sync ECharts legend state when legendSelected changes
+  useEffect(() => {
+    if (chartRef.current) {
+      const chartInstance = chartRef.current.getEchartsInstance();
+      chartInstance.setOption({
+        legend: {
+          selected: legendSelected
+        }
+      });
+    }
+  }, [legendSelected]);
 
   if (papers.length === 0) {
     return (
@@ -144,21 +156,33 @@ export const NetworkView: React.FC<NetworkViewProps> = ({ papers, masterPaper })
       {filteredPapers.length > 0 ? (
         <div className="w-full h-[600px] border rounded-lg bg-white">
           <ReactECharts 
+            ref={chartRef}
             option={option} 
             style={{ height: '100%', width: '100%' }}
             opts={{ renderer: 'canvas' }}
             onEvents={{
               legendselectchanged: (params: any) => {
-                setLegendSelected(params.selected);
+                setIsUpdatingFromChart(true);
                 
-                // Update active filters based on legend selection using proper mapping
+                // Ensure Master Paper always stays selected
+                const updatedSelected = {
+                  ...params.selected,
+                  'Master Paper': true
+                };
+                
+                setLegendSelected(updatedSelected);
+                
+                // Update active filters based on legend selection (additive behavior)
                 const newActiveFilters: string[] = [];
-                Object.entries(params.selected).forEach(([legendName, isSelected]) => {
+                Object.entries(updatedSelected).forEach(([legendName, isSelected]) => {
                   if (isSelected && legendToFilterMap[legendName]) {
                     newActiveFilters.push(legendToFilterMap[legendName]);
                   }
                 });
                 setActiveFilters(newActiveFilters);
+                
+                // Reset the circular update flag after a brief delay
+                setTimeout(() => setIsUpdatingFromChart(false), 100);
               }
             }}
           />
