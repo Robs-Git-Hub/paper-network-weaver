@@ -37,7 +37,7 @@ function generatePapersCSV(papers: Record<string, Paper>): string {
   const headers = [
     'short_uid', 'title', 'publication_year', 'publication_date', 'location', 
     'abstract', 'fwci', 'cited_by_count', 'type', 'language', 'oa_status', 
-    'best_oa_url', 'is_stub'
+    'best_oa_url', 'article_landing_page', 'is_stub'
   ];
   
   const paperData = Object.values(papers).map(paper => ({
@@ -53,6 +53,7 @@ function generatePapersCSV(papers: Record<string, Paper>): string {
     language: paper.language,
     oa_status: paper.oa_status,
     best_oa_url: paper.best_oa_url,
+    article_landing_page: paper.article_landing_page,
     is_stub: paper.is_stub ? 'true' : 'false'
   }));
   
