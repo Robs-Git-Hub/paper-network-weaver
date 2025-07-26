@@ -18,7 +18,9 @@ export const NetworkView: React.FC<NetworkViewProps> = ({ papers, masterPaper })
     activeFilters,
     setActiveFilters,
     filteredPapers,
-    filterCounts
+    filterCounts,
+    legendSelected,
+    setLegendSelected
   } = useRelationshipFilters(papers);
 
   const chartData = useMemo(() => {
@@ -58,6 +60,10 @@ export const NetworkView: React.FC<NetworkViewProps> = ({ papers, masterPaper })
     legend: {
       show: true,
       data: chartData.categories.map(cat => cat.name),
+      selected: {
+        'Master Paper': true, // Always show master paper
+        ...legendSelected
+      },
       top: 20,
       left: 'center'
     },
