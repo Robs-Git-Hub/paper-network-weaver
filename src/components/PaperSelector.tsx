@@ -17,7 +17,7 @@ export const PaperSelector: React.FC<PaperSelectorProps> = ({
   totalCount 
 }) => {
   const isSelectablePaper = (paper: PaperResult): boolean => {
-    return !paper.cited_by_count || paper.cited_by_count <= 200;
+    return paper.cited_by_count !== undefined && paper.cited_by_count > 0 && paper.cited_by_count <= 200;
   };
 
   const renderPaperCard = (paper: PaperResult) => {
@@ -81,7 +81,7 @@ export const PaperSelector: React.FC<PaperSelectorProps> = ({
             {cardContent}
           </TooltipTrigger>
           <TooltipContent>
-            ACE is currently only able to process papers that have been cited up to 200 times
+            ACE is currently only able to process papers that have been cited between 1 and 200 times
           </TooltipContent>
         </Tooltip>
       );
