@@ -29,9 +29,8 @@ export const PaperSelector: React.FC<PaperSelectorProps> = ({
         className={`transition-colors border border-gray-200 ${
           isSelectable 
             ? 'cursor-pointer hover:bg-gray-50' 
-            : 'cursor-not-allowed'
+            : 'cursor-not-allowed bg-muted'
         }`}
-        style={!isSelectable ? { backgroundColor: 'hsl(210, 56%, 96%)' } : undefined}
         onClick={isSelectable ? () => onSelectPaper(paper) : undefined}
       >
         <CardContent className="p-4">
