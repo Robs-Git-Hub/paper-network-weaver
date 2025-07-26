@@ -1,5 +1,5 @@
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 // REFACTOR: Import `relation_to_master` instead of `paper_relationships`.
 import { useKnowledgeGraphStore } from '@/store/knowledge-graph-store';
 // FIX: Import the EnrichedPaper type from its new central location.
@@ -19,6 +19,16 @@ export const useRelationshipFilters = (papers: EnrichedPaper[]) => {
     'Second-Degree': false,
     'Co-Cited': false
   });
+
+  // Sync legendSelected with activeFilters when filters change
+  useEffect(() => {
+    const newLegendSelected: Record<string, boolean> = {
+      'Direct Citations': activeFilters.includes('1st_degree'),
+      'Second-Degree': activeFilters.includes('2nd_degree'),
+      'Co-Cited': activeFilters.includes('referenced_by_1st_degree')
+    };
+    setLegendSelected(newLegendSelected);
+  }, [activeFilters]);
 
   const filteredPapers = useMemo(() => {
     // If no filters are active, return all papers provided to the hook.
