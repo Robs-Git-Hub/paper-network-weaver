@@ -1,7 +1,8 @@
 import React from 'react';
-import { Search, MousePointer, Network, BarChart3, Download } from 'lucide-react';
+import { Search, MousePointer, Network, BarChart3, Download, HelpCircle } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/accordion';
 import { useNavigate } from 'react-router-dom';
 
 const About: React.FC = () => {
@@ -32,6 +33,25 @@ const About: React.FC = () => {
       icon: Download,
       title: "Export",
       description: "Export your citation data with a comprehensive table description file"
+    }
+  ];
+
+  const faqs = [
+    {
+      question: "There is a Frictionless package description file in my export – what is it?",
+      answer: "Frictionless is a data management framework for Python that provides functionality to describe, extract, validate, and transform tabular data. The file will help you import your exported data into a Python script for further analysis and processing. It also acts as a record of what each column in each table of the export is for."
+    },
+    {
+      question: "Why can I only select papers with fewer than 200 citations?",
+      answer: "ACE was designed to be a lightweight website that can process the papers of newer academics and researchers. If your paper has over 200 citations, congratulations! But it is larger than the site can efficiently process. If there is sufficient demand, I may redesign the site to handle larger citation networks."
+    },
+    {
+      question: "How is this different to Connected Papers or Citation Gecko?",
+      answer: "Those are great sites, but they don't show you all first- and second-degree citations—at least not easily. ACE is a simpler tool designed with that single purpose in mind."
+    },
+    {
+      question: "Why can't I see some citations that Google Scholar shows?",
+      answer: "The primary source of citation information is OpenAlex—credit and thanks to their excellent open-source service. I've found there are typically around 20% more citations on Google Scholar. However, fetching those would require web scraping, which would slow the site and incur costs. ACE is designed to be lightweight and free."
     }
   ];
 
@@ -104,6 +124,32 @@ const About: React.FC = () => {
               );
             })}
           </div>
+        </section>
+
+        {/* FAQ Section */}
+        <section className="mb-16">
+          <div className="flex items-center gap-3 mb-6">
+            <HelpCircle className="h-6 w-6 text-primary" />
+            <h2 className="text-2xl font-semibold text-foreground">Frequently Asked Questions</h2>
+          </div>
+          <Card>
+            <CardContent className="pt-6">
+              <Accordion type="single" collapsible className="w-full">
+                {faqs.map((faq, index) => (
+                  <AccordionItem key={index} value={`item-${index}`}>
+                    <AccordionTrigger className="text-left font-medium text-foreground">
+                      {faq.question}
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <p className="text-muted-foreground leading-relaxed">
+                        {faq.answer}
+                      </p>
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
+            </CardContent>
+          </Card>
         </section>
 
         {/* Created By Section */}
