@@ -87,8 +87,26 @@ export function setupWorkerMessageHandler() {
             utils.postMessage('app_status/update', { state: 'extending' });
             
             let overallProgress = PHASE_A_B_WEIGHTS.COMPLETE;
+            let secondDegreeProgress = 0;
+            let hydrateProgress = 0;
+            
             const updateAndPostProgress = (stepProgress: number, message: string) => {
-              overallProgress += stepProgress;
+              // Determine which phase we're in based on the message
+              if (message.includes('second-degree') || message.includes('Fetching second-degree')) {
+                secondDegreeProgress += stepProgress;
+                // Transform 0-80% internal progress to 0-50% visual progress (first half of Phase C)
+                const visualProgress = (secondDegreeProgress / PHASE_C_WEIGHTS.FETCH_SECOND_DEGREE) * 15; // 30% of total (50% of Phase C)
+                overallProgress = PHASE_A_B_WEIGHTS.COMPLETE + visualProgress;
+              } else if (message.includes('Hydrating') || message.includes('hydrating')) {
+                hydrateProgress += stepProgress;
+                // Transform 0-20% internal progress to 50-100% visual progress (second half of Phase C)
+                const visualProgress = 15 + (hydrateProgress / PHASE_C_WEIGHTS.HYDRATE_STUBS) * 15; // Start at 50% + remaining 50%
+                overallProgress = PHASE_A_B_WEIGHTS.COMPLETE + visualProgress;
+              } else {
+                // Fallback for any other messages
+                overallProgress += stepProgress;
+              }
+              
               utils.postMessage('progress/update', { progress: Math.min(overallProgress, 99), message });
             };
 

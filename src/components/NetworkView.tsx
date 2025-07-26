@@ -5,11 +5,11 @@ import { useKnowledgeGraphStore } from '@/store/knowledge-graph-store';
 import { transformPapersToNetwork } from '@/utils/network-data-transformer';
 import { FilterControls } from '@/components/FilterControls';
 import { useRelationshipFilters } from '@/hooks/useRelationshipFilters';
-import type { Paper } from '@/store/knowledge-graph-store';
+import type { EnrichedPaper } from '@/types';
 
 interface NetworkViewProps {
-  papers: Paper[];
-  masterPaper: Paper;
+  papers: EnrichedPaper[];
+  masterPaper: EnrichedPaper;
 }
 
 export const NetworkView: React.FC<NetworkViewProps> = ({ papers, masterPaper }) => {
