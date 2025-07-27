@@ -112,7 +112,7 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <AppHeader />
-      <div className="flex-1 flex flex-col items-center justify-center px-4 py-8 min-h-[calc(100vh-3.5rem)]">
+      <div className="flex-1 flex flex-col items-center justify-center px-4 py-8 min-h-[calc(100vh-7.5rem)]">
         <div className="w-full max-w-4xl space-y-8">
           <div className="text-center space-y-4">
             <h1 className="text-4xl font-bold tracking-tight">
