@@ -39,7 +39,7 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
             key={filter.value} 
             value={filter.value} 
             variant="outline"
-            className="data-[state=on]:bg-[#437e84] data-[state=on]:text-white"
+            className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
           >
             <div className="flex items-center gap-2">
               <span>{filter.label}</span>

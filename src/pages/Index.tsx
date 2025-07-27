@@ -78,7 +78,7 @@ const Index = () => {
               setAppStatus({ state: 'idle', message: null });
               workerManager.initialize();
             }}
-            className="px-4 py-2 bg-[#437e84] text-white rounded hover:bg-[#437e84]/90"
+            className="px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90"
           >
             Try Again
           </button>
@@ -112,8 +112,8 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <AppHeader />
-      <div className="flex-1 flex flex-col items-center justify-center px-4">
-        <div className="w-full max-w-4xl space-y-8 mt-[20vh] sm:mt-0">
+      <div className="flex-1 flex flex-col items-center justify-center px-4 py-8 min-h-[calc(100vh-7.5rem)]">
+        <div className="w-full max-w-4xl space-y-8">
           <div className="text-center space-y-4">
             <h1 className="text-4xl font-bold tracking-tight">
               Academic Citation Explorer
@@ -123,7 +123,11 @@ const Index = () => {
             </p>
           </div>
 
-          <SearchBar onSearch={handleSearch} isLoading={isSearching} />
+          <SearchBar 
+            onSearch={handleSearch} 
+            isLoading={isSearching}
+            exampleQuery="Understanding cybersecurity capacity building"
+          />
 
           {searchResults.length > 0 && (
             <PaperSelector

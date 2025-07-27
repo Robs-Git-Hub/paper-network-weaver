@@ -46,17 +46,20 @@ const RELATIONSHIP_COLORS = {
   '1st_degree': '#ffa600',        // Direct citations
   '2nd_degree': '#5ba75a',        // Second-Degree
   'referenced_by_1st_degree': '#a6af24', // Co-Cited
-  'similar': '#2c957e'            // Similar
 };
 
 const getNodeColor = (relationshipTags: string[]) => {
   // Return color based on primary relationship tag
-  for (const tag of ['1st_degree', '2nd_degree', 'referenced_by_1st_degree', 'similar']) {
+  for (const tag of ['1st_degree', '2nd_degree', 'referenced_by_1st_degree']) {
     if (relationshipTags.includes(tag)) {
       return RELATIONSHIP_COLORS[tag as keyof typeof RELATIONSHIP_COLORS];
     }
   }
-  return '#6b7280'; // default gray
+  // Log warning for papers without recognized relationship tags
+  if (relationshipTags.length > 0) {
+    console.warn('Unrecognized relationship tags:', relationshipTags);
+  }
+  return '#6b7280'; // default gray for papers without recognized tags
 };
 
 const getNodeSize = (citedByCount: number) => {
@@ -77,11 +80,10 @@ export const transformPapersToNetwork = (
   // Create nodes
   const nodes: NetworkNode[] = [];
   const categories: NetworkCategory[] = [
-    { name: 'Master Paper', itemStyle: { color: '#437e84' } },
+    { name: 'Master Paper', itemStyle: { color: 'hsl(186 33% 39%)' } },
     { name: 'Direct Citations', itemStyle: { color: RELATIONSHIP_COLORS['1st_degree'] } },
     { name: 'Second-Degree', itemStyle: { color: RELATIONSHIP_COLORS['2nd_degree'] } },
-    { name: 'Co-Cited', itemStyle: { color: RELATIONSHIP_COLORS['referenced_by_1st_degree'] } },
-    { name: 'Similar', itemStyle: { color: RELATIONSHIP_COLORS['similar'] } }
+    { name: 'Co-Cited', itemStyle: { color: RELATIONSHIP_COLORS['referenced_by_1st_degree'] } }
   ];
 
   // Add master paper as central node
@@ -98,7 +100,7 @@ export const transformPapersToNetwork = (
     value: masterPaper.cited_by_count,
     category: 0, // Master paper category
     symbolSize: 80,
-    itemStyle: { color: '#437e84' },
+    itemStyle: { color: 'hsl(186 33% 39%)' },
     label: { show: true },
     paperData: {
       title: masterPaper.title,
@@ -120,11 +122,14 @@ export const transformPapersToNetwork = (
       .map(auth => authorsMap[auth.author_short_uid]?.clean_name)
       .filter(Boolean);
 
-    const primaryTag = paper.relationship_tags?.[0] || 'similar';
-    let categoryIndex = 4; // default to similar
+    const primaryTag = paper.relationship_tags?.[0];
+    let categoryIndex = 0; // default to master paper category if no recognized tag
     if (primaryTag === '1st_degree') categoryIndex = 1;
     else if (primaryTag === '2nd_degree') categoryIndex = 2;
     else if (primaryTag === 'referenced_by_1st_degree') categoryIndex = 3;
+    else if (primaryTag && !['1st_degree', '2nd_degree', 'referenced_by_1st_degree'].includes(primaryTag)) {
+      console.warn(`Unrecognized relationship tag for paper ${paper.short_uid}:`, primaryTag);
+    }
 
     nodes.push({
       id: paper.short_uid,

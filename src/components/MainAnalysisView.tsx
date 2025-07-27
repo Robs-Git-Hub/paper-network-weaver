@@ -26,6 +26,13 @@ export const MainAnalysisView: React.FC<MainAnalysisViewProps> = ({
   const isInitialLoading = ['loading', 'enriching'].includes(app_status.state);
   const isExtending = app_status.state === 'extending';
 
+  // Create enriched version of master paper
+  const enrichedMasterPaper = useMemo<EnrichedPaper | null>(() => {
+    if (!masterPaper) return null;
+    
+    return enriched_papers[masterPaper.short_uid] || null;
+  }, [masterPaper, enriched_papers]);
+
   // This calculation is now dramatically faster.
   // Instead of rebuilding everything on each render, we just do a quick lookup
   // in the pre-computed `enriched_papers` map.
@@ -66,7 +73,13 @@ export const MainAnalysisView: React.FC<MainAnalysisViewProps> = ({
       case 'Table':
         return <UnifiedCitationsTable papers={enrichedRelatedPapers} />;
       case 'Network':
-        return <NetworkView papers={enrichedRelatedPapers} masterPaper={masterPaper} />;
+        return enrichedMasterPaper ? (
+          <NetworkView papers={enrichedRelatedPapers} masterPaper={enrichedMasterPaper} />
+        ) : (
+          <div className="text-center py-8">
+            <p className="text-muted-foreground">Master paper data not yet enriched</p>
+          </div>
+        );
       default:
         return <UnifiedCitationsTable papers={enrichedRelatedPapers} />;
     }
@@ -90,7 +103,7 @@ export const MainAnalysisView: React.FC<MainAnalysisViewProps> = ({
         
         {isExtending && app_status.message && (
           <ProgressDisplay 
-            value={app_status.progress || 0} 
+            value={app_status.phaseCProgress || 0} 
             label={app_status.message} 
           />
         )}

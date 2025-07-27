@@ -87,9 +87,32 @@ export function setupWorkerMessageHandler() {
             utils.postMessage('app_status/update', { state: 'extending' });
             
             let overallProgress = PHASE_A_B_WEIGHTS.COMPLETE;
+            let secondDegreeProgress = 0;
+            let hydrateProgress = 0;
+            
             const updateAndPostProgress = (stepProgress: number, message: string) => {
+              // Update individual step progress first
+              if (message.includes('second-degree') || message.includes('Fetching second-degree')) {
+                secondDegreeProgress += stepProgress;
+              } else if (message.includes('Hydrating') || message.includes('hydrating')) {
+                hydrateProgress += stepProgress;
+              }
+              
+              // Calculate Phase C progress (0-100%)
+              const phaseCProgress = Math.min(
+                ((secondDegreeProgress + hydrateProgress) / 
+                 (PHASE_C_WEIGHTS.FETCH_SECOND_DEGREE + PHASE_C_WEIGHTS.HYDRATE_STUBS)) * 100,
+                100
+              );
+              
+              // Calculate overall progress for legacy purposes
               overallProgress += stepProgress;
-              utils.postMessage('progress/update', { progress: Math.min(overallProgress, 99), message });
+              
+              utils.postMessage('progress/update', { 
+                progress: Math.min(overallProgress, 99), 
+                phaseCProgress,
+                message 
+              });
             };
 
             const progressAwareUtils = { ...utils, updateAndPostProgress };
@@ -98,7 +121,7 @@ export function setupWorkerMessageHandler() {
             await hydrateStubPapers(getState, progressAwareUtils, PHASE_C_WEIGHTS);
 
             console.log('--- [Worker] Phase C Complete. Graph extension finished. ---');
-            utils.postMessage('progress/update', { progress: 100, message: 'Analysis complete!' });
+            utils.postMessage('progress/update', { progress: 100, phaseCProgress: 100, message: 'Analysis complete!' });
             utils.postMessage('app_status/update', { state: 'active', message: null });
           } catch (error) {
             console.error('[Worker] Error during graph extension:', error);

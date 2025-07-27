@@ -22,9 +22,22 @@ export const MasterPaperCard: React.FC<MasterPaperCardProps> = ({ paper }) => {
     .filter(Boolean);
 
   return (
-    <Card className="border-2 border-[#437e84]">
+    <Card className="border-2 border-primary">
       <CardHeader>
-        <CardTitle className="text-lg">{paper.title}</CardTitle>
+        <CardTitle className="text-lg">
+          {paper.article_landing_page ? (
+            <a 
+              href={paper.article_landing_page} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
+              {paper.title}
+            </a>
+          ) : (
+            paper.title
+          )}
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="flex flex-wrap gap-2">

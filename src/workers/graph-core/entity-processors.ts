@@ -48,6 +48,7 @@ export async function processOpenAlexPaper(
       keywords: extractKeywords(paperData.keywords),
       best_oa_url: paperData.open_access?.oa_url || null,
       oa_status: paperData.open_access?.oa_status || null,
+      article_landing_page: paperData.primary_location?.landing_page_url || null,
       is_stub: isStub,
     };
     papers[paperUid] = newPaper;
@@ -78,6 +79,7 @@ export async function processOpenAlexPaper(
         keywords: extractKeywords(paperData.keywords).length > 0 ? extractKeywords(paperData.keywords) : existingPaper.keywords,
         best_oa_url: paperData.open_access?.oa_url || existingPaper.best_oa_url,
         oa_status: paperData.open_access?.oa_status || existingPaper.oa_status,
+        article_landing_page: paperData.primary_location?.landing_page_url || existingPaper.article_landing_page,
       };
       papers[paperUid] = { ...existingPaper, ...changes };
       utils.postMessage('papers/updateOne', { id: paperUid, changes });
@@ -173,6 +175,7 @@ export async function processSemanticScholarPaper(
       keywords: [],
       best_oa_url: paperData.openAccessPdf?.url || null,
       oa_status: paperData.openAccessPdf?.url ? 'green' : 'closed',
+      article_landing_page: null,
       is_stub: true,
     };
     utils.postMessage('graph/addPaper', { paper: newPaper });

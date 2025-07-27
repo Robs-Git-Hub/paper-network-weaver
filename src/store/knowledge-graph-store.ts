@@ -20,7 +20,9 @@ export interface Paper {
   keywords: string[];
   best_oa_url: string | null;
   oa_status: string | null;
+  article_landing_page: string | null;
   is_stub: boolean;
+  relationship_tags?: string[];
 }
 
 export interface Author {
@@ -57,6 +59,7 @@ export interface AppStatus {
   state: 'idle' | 'loading' | 'enriching' | 'extending' | 'active' | 'error';
   message: string | null;
   progress?: number;
+  phaseCProgress?: number;
 }
 
 interface WorkerMessage {

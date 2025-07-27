@@ -1,15 +1,15 @@
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef, useEffect } from 'react';
 import ReactECharts from 'echarts-for-react';
 import { useKnowledgeGraphStore } from '@/store/knowledge-graph-store';
 import { transformPapersToNetwork } from '@/utils/network-data-transformer';
 import { FilterControls } from '@/components/FilterControls';
 import { useRelationshipFilters } from '@/hooks/useRelationshipFilters';
-import type { Paper } from '@/store/knowledge-graph-store';
+import type { EnrichedPaper } from '@/types';
 
 interface NetworkViewProps {
-  papers: Paper[];
-  masterPaper: Paper;
+  papers: EnrichedPaper[];
+  masterPaper: EnrichedPaper;
 }
 
 export const NetworkView: React.FC<NetworkViewProps> = ({ papers, masterPaper }) => {
@@ -18,8 +18,25 @@ export const NetworkView: React.FC<NetworkViewProps> = ({ papers, masterPaper })
     activeFilters,
     setActiveFilters,
     filteredPapers,
-    filterCounts
+    filterCounts,
+    legendSelected,
+    setLegendSelected,
+    setIsUpdatingFromChart
   } = useRelationshipFilters(papers);
+
+  const chartRef = useRef<ReactECharts>(null);
+
+  // Mapping from filter values to legend category names
+  const filterToLegendMap = {
+    '1st_degree': 'Direct Citations',
+    '2nd_degree': 'Second-Degree',
+    'referenced_by_1st_degree': 'Co-Cited'
+  };
+
+  // Reverse mapping from legend category names to filter values
+  const legendToFilterMap = Object.fromEntries(
+    Object.entries(filterToLegendMap).map(([filter, legend]) => [legend, filter])
+  );
 
   const chartData = useMemo(() => {
     return transformPapersToNetwork(
@@ -39,16 +56,59 @@ export const NetworkView: React.FC<NetworkViewProps> = ({ papers, masterPaper })
     },
     tooltip: {
       trigger: 'item',
+      confine: true,
+      backgroundColor: 'rgba(0, 0, 0, 0.8)',
+      borderColor: 'rgba(255, 255, 255, 0.2)',
+      borderWidth: 1,
+      textStyle: {
+        color: '#fff'
+      },
       formatter: (params: any) => {
         if (params.dataType === 'node' && params.data.paperData) {
           const data = params.data.paperData;
+          
+          // Truncate title if too long
+          const maxTitleLength = 80;
+          const displayTitle = data.title.length > maxTitleLength 
+            ? data.title.substring(0, maxTitleLength) + '...' 
+            : data.title;
+          
+          // Handle authors list with line breaks for readability
+          let authorsDisplay = '';
+          if (data.authors.length > 0) {
+            const maxAuthorsPerLine = 3;
+            const authorGroups = [];
+            for (let i = 0; i < data.authors.length; i += maxAuthorsPerLine) {
+              authorGroups.push(data.authors.slice(i, i + maxAuthorsPerLine).join(', '));
+            }
+            authorsDisplay = authorGroups.join('<br/>');
+          }
+          
+          // Handle tags with proper wrapping
+          const tagsDisplay = data.relationshipTags.length > 0 
+            ? data.relationshipTags.join(', ') 
+            : '';
+          
           return `
-            <div style="max-width: 300px;">
-              <div style="font-weight: bold; margin-bottom: 8px;">${data.title}</div>
+            <div style="
+              max-width: 320px;
+              word-wrap: break-word;
+              overflow-wrap: break-word;
+              white-space: normal;
+              line-height: 1.4;
+              box-sizing: border-box;
+              padding: 8px;
+            ">
+              <div style="
+                font-weight: bold; 
+                margin-bottom: 8px;
+                word-wrap: break-word;
+                overflow-wrap: break-word;
+              ">${displayTitle}</div>
               <div style="margin-bottom: 4px;"><strong>Citations:</strong> ${data.citedByCount}</div>
               <div style="margin-bottom: 4px;"><strong>Year:</strong> ${data.publicationYear || 'N/A'}</div>
-              ${data.authors.length > 0 ? `<div style="margin-bottom: 4px;"><strong>Authors:</strong> ${data.authors.join(', ')}</div>` : ''}
-              ${data.relationshipTags.length > 0 ? `<div><strong>Tags:</strong> ${data.relationshipTags.join(', ')}</div>` : ''}
+              ${data.authors.length > 0 ? `<div style="margin-bottom: 4px; word-wrap: break-word;"><strong>Authors:</strong><br/>${authorsDisplay}</div>` : ''}
+              ${data.relationshipTags.length > 0 ? `<div style="word-wrap: break-word;"><strong>Tags:</strong> ${tagsDisplay}</div>` : ''}
             </div>
           `;
         }
@@ -58,6 +118,7 @@ export const NetworkView: React.FC<NetworkViewProps> = ({ papers, masterPaper })
     legend: {
       show: true,
       data: chartData.categories.map(cat => cat.name),
+      selected: legendSelected,
       top: 20,
       left: 'center'
     },
@@ -103,7 +164,19 @@ export const NetworkView: React.FC<NetworkViewProps> = ({ papers, masterPaper })
         }
       }
     ]
-  }), [chartData]);
+  }), [chartData, legendSelected]);
+
+  // Sync ECharts legend state when legendSelected changes
+  useEffect(() => {
+    if (chartRef.current) {
+      const chartInstance = chartRef.current.getEchartsInstance();
+      chartInstance.setOption({
+        legend: {
+          selected: legendSelected
+        }
+      });
+    }
+  }, [legendSelected]);
 
   if (papers.length === 0) {
     return (
@@ -126,9 +199,35 @@ export const NetworkView: React.FC<NetworkViewProps> = ({ papers, masterPaper })
       {filteredPapers.length > 0 ? (
         <div className="w-full h-[600px] border rounded-lg bg-white">
           <ReactECharts 
+            ref={chartRef}
             option={option} 
             style={{ height: '100%', width: '100%' }}
             opts={{ renderer: 'canvas' }}
+            onEvents={{
+              legendselectchanged: (params: any) => {
+                setIsUpdatingFromChart(true);
+                
+                // Ensure Master Paper always stays selected
+                const updatedSelected = {
+                  ...params.selected,
+                  'Master Paper': true
+                };
+                
+                setLegendSelected(updatedSelected);
+                
+                // Update active filters based on legend selection (additive behavior)
+                const newActiveFilters: string[] = [];
+                Object.entries(updatedSelected).forEach(([legendName, isSelected]) => {
+                  if (isSelected && legendToFilterMap[legendName]) {
+                    newActiveFilters.push(legendToFilterMap[legendName]);
+                  }
+                });
+                setActiveFilters(newActiveFilters);
+                
+                // Reset the circular update flag after a brief delay
+                setTimeout(() => setIsUpdatingFromChart(false), 100);
+              }
+            }}
           />
         </div>
       ) : (
